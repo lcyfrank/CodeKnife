@@ -2,7 +2,7 @@ from capstone import *
 from capstone.arm64 import *
 
 TEST_PATH = './Test'
-# TEST_PATH = './pinduoduo'
+# TEST_PATH = './Target/pinduoduo'
 
 # Constant
 FA_CPU_TYPE_KEY = 'cputype'
