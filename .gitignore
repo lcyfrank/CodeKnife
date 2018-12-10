@@ -2,3 +2,4 @@
 Test
 Test.*
 Target
+__pycache__
