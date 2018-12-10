@@ -1,5 +1,7 @@
 from capstone import *
 from capstone.arm64 import *
+from capstone.arm import *
+from capstone.x86 import *
 from mach_o_info import *
 
 # TEST_PATH = './Test'
@@ -30,10 +32,6 @@ def parse_int_from_bytes(buffer, begin, length, little=True):
             temp_buffer = buffer[i: i + 1] + temp_buffer
         return int(temp_buffer.hex(), 16)
     return int(buffer[begin: begin + length].hex(), 16)
-
-
-def parse_str_from_bytes(buffer, begin, length):
-    return buffer[begin:begin + length].decode('utf-8')
 
 
 def parse_fat_binary_if_should(buffer):
@@ -78,6 +76,23 @@ def parse_fat_binary_if_should(buffer):
             FA_ALIGN_KEY: parse_values[4]
         })
     return fat_archs
+
+
+def _slice_by_function_for_arm64(model, machine_code, base_addr):
+    functions = []
+    current_function = []
+    function_over = False
+    for insn in model.disasm(machine_code, base_addr):
+        if not function_over:
+            current_function.append(insn)
+            if (insn.id == ARM64_INS_RET):
+                function_over = True
+                functions.append(current_function)
+        else:
+            current_function = []
+            function_over = False
+            current_function.append(insn)
+    return functions
 
 
 def parse_text_from_mach(buffer, offset=0x0):
@@ -169,7 +184,6 @@ if __name__ == "__main__":
                 mach_o_content_bytes[begin:begin + size], begin)
             mach_infos.append(parse_result)
 
-    model = None
     for i in range(len(mach_infos)):
         mach_info = mach_infos[i]
         mach_header = mach_info['mach_header']
@@ -188,6 +202,7 @@ if __name__ == "__main__":
             mode = (CS_MODE_32 if mach_header.magic ==
                     MachHeader.MH_MAGIC_32 else CS_MODE_64)
         model = Cs(arch, mode)
+        model.detail = True
 
         text_addr = (text_section.addr if mach_header.magic ==
                      MachHeader.MH_MAGIC_32 else (text_section.addr - 0x100000000))
@@ -196,11 +211,40 @@ if __name__ == "__main__":
 
         # WARNING!!!
         # 如果机器码太多，反编译过程会中断，不知道为啥
-        for (address, size, mnemonic, op_str) in model.disasm_lite(machine_code, text_section.addr):
-            # TODO: 找到函数边界（可以通过 capstone 提供的指令类型）
-            # print(address)
-            print(mnemonic)
-            # pass
+        functions = _slice_by_function_for_arm64(
+            model, machine_code, text_addr)
 
-            # Reference:
-            # > https://zhuanlan.zhihu.com/p/24858664
+        for function in functions:
+            print('==========================================')
+            for insn in function:
+                print('0x%s\t0x%s\t%s\t%s' % (hex(insn.address),
+                                          insn.bytes.hex(), insn.mnemonic, insn.op_str))
+        # for insn in model.disasm(machine_code, text_section.addr):
+        #     # TODO: 找到函数边界（可以通过 capstone 提供的指令id）
+        #     # 以 64-bit 为例
+        #     if not function_over:
+        #         current_function.append(insn)
+        #         if (insn.id == ARM64_INS_RET):
+        #             function_over = True
+        #             functions.append(current_function)
+        #     else:
+        #         current_function = []
+        #         function_over = False
+        #         current_function.append(insn)
+        # print(functions)
+
+        # ARM64_INS_ADC
+        # id
+        # address
+        # size
+        # bytes
+        # mnemonic
+        # op_str
+        # regs_read
+        # regs_write
+        # groups
+        # operands
+
+
+# Reference:
+# > https://zhuanlan.zhihu.com/p/24858664

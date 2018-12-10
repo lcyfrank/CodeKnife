@@ -1,3 +1,4 @@
+from utils import *
 # The `cpu_type_t` value for Mach-O header
 # https://opensource.apple.com/source/cctools/cctools-836/include/mach/machine.h
 CPU_TYPE_ARM = 0xc
@@ -46,13 +47,13 @@ class MachHeader(MachBase):
     @classmethod
     def parse_from_bytes(cls, _bytes):
         mh = cls()
-        mh.magic = _parse_int(_bytes[0:4])
-        mh.cputype = _parse_int(_bytes[4:8])
-        mh.cpusubtype = _parse_int(_bytes[8:12])
-        mh.filetype = _parse_int(_bytes[12:16])
-        mh.ncmds = _parse_int(_bytes[16:20])
-        mh.sizeofcmds = _parse_int(_bytes[20:24])
-        mh.flags = _parse_int(_bytes[24:28])
+        mh.magic = parse_int(_bytes[0:4])
+        mh.cputype = parse_int(_bytes[4:8])
+        mh.cpusubtype = parse_int(_bytes[8:12])
+        mh.filetype = parse_int(_bytes[12:16])
+        mh.ncmds = parse_int(_bytes[16:20])
+        mh.sizeofcmds = parse_int(_bytes[20:24])
+        mh.flags = parse_int(_bytes[24:28])
         return mh
 
     def get_size(self):
@@ -71,7 +72,7 @@ class MachHeader64(MachHeader):
     @classmethod
     def parse_from_bytes(cls, _bytes):
         mh_64 = super().parse_from_bytes(_bytes)
-        mh_64.reserved = _parse_int(_bytes[28:32])
+        mh_64.reserved = parse_int(_bytes[28:32])
         return mh_64
 
     def get_size(self):
@@ -94,8 +95,8 @@ class LoadCommand(MachBase):
     @classmethod
     def parse_from_bytes(cls, _bytes):
         lc = cls()
-        lc.cmd = _parse_int(_bytes[0:4])
-        lc.cmdsize = _parse_int(_bytes[4:8])
+        lc.cmd = parse_int(_bytes[0:4])
+        lc.cmdsize = parse_int(_bytes[4:8])
         return lc
 
     def get_size(self):
@@ -130,17 +131,17 @@ class SegmentCommand(LoadCommand):
     @classmethod
     def parse_from_bytes(cls, _bytes):
         sc = cls()
-        sc.cmd = _parse_int(_bytes[0:4])
-        sc.cmdsize = _parse_int(_bytes[4:8])
-        sc.segname = _parse_str(_bytes[8:24])
-        sc.vmaddr = _parse_int(_bytes[24:28])
-        sc.vmsize = _parse_int(_bytes[28:32])
-        sc.fileoff = _parse_int(_bytes[32:36])
-        sc.filesize = _parse_int(_bytes[36:40])
-        sc.maxprot = _parse_int(_bytes[40:44])
-        sc.initprot = _parse_int(_bytes[44:48])
-        sc.nsects = _parse_int(_bytes[48:52])
-        sc.flags = _parse_int(_bytes[52:56])
+        sc.cmd = parse_int(_bytes[0:4])
+        sc.cmdsize = parse_int(_bytes[4:8])
+        sc.segname = parse_str(_bytes[8:24])
+        sc.vmaddr = parse_int(_bytes[24:28])
+        sc.vmsize = parse_int(_bytes[28:32])
+        sc.fileoff = parse_int(_bytes[32:36])
+        sc.filesize = parse_int(_bytes[36:40])
+        sc.maxprot = parse_int(_bytes[40:44])
+        sc.initprot = parse_int(_bytes[44:48])
+        sc.nsects = parse_int(_bytes[48:52])
+        sc.flags = parse_int(_bytes[52:56])
         return sc
 
     def get_size(self):
@@ -162,17 +163,17 @@ class SegmentCommand64(SegmentCommand):
     @classmethod
     def parse_from_bytes(cls, _bytes):
         sc64 = cls()
-        sc64.cmd = _parse_int(_bytes[0:4])
-        sc64.cmdsize = _parse_int(_bytes[4:8])
-        sc64.segname = _parse_str(_bytes[8:24])
-        sc64.vmaddr = _parse_int(_bytes[24:32])
-        sc64.vmsize = _parse_int(_bytes[32:40])
-        sc64.fileoff = _parse_int(_bytes[40:48])
-        sc64.filesize = _parse_int(_bytes[48:56])
-        sc64.maxprot = _parse_int(_bytes[56:60])
-        sc64.initprot = _parse_int(_bytes[60:64])
-        sc64.nsects = _parse_int(_bytes[64:68])
-        sc64.flags = _parse_int(_bytes[68:72])
+        sc64.cmd = parse_int(_bytes[0:4])
+        sc64.cmdsize = parse_int(_bytes[4:8])
+        sc64.segname = parse_str(_bytes[8:24])
+        sc64.vmaddr = parse_int(_bytes[24:32])
+        sc64.vmsize = parse_int(_bytes[32:40])
+        sc64.fileoff = parse_int(_bytes[40:48])
+        sc64.filesize = parse_int(_bytes[48:56])
+        sc64.maxprot = parse_int(_bytes[56:60])
+        sc64.initprot = parse_int(_bytes[60:64])
+        sc64.nsects = parse_int(_bytes[64:68])
+        sc64.flags = parse_int(_bytes[68:72])
         return sc64
 
     def get_size(self):
@@ -210,17 +211,17 @@ class Section(MachBase):
     @classmethod
     def parse_from_bytes(cls, _bytes):
         section = cls()
-        section.sectname = _parse_str(_bytes[0:16])
-        section.segname = _parse_str(_bytes[16:32])
-        section.addr = _parse_int(_bytes[32:36])
-        section.size = _parse_int(_bytes[36:40])
-        section.offset = _parse_int(_bytes[40:44])
-        section.align = _parse_int(_bytes[44:48])
-        section.reloff = _parse_int(_bytes[48:52])
-        section.nreloc = _parse_int(_bytes[52:56])
-        section.flags = _parse_int(_bytes[56:60])
-        section.reserved1 = _parse_int(_bytes[60:64])
-        section.reserved2 = _parse_int(_bytes[64:68])
+        section.sectname = parse_str(_bytes[0:16])
+        section.segname = parse_str(_bytes[16:32])
+        section.addr = parse_int(_bytes[32:36])
+        section.size = parse_int(_bytes[36:40])
+        section.offset = parse_int(_bytes[40:44])
+        section.align = parse_int(_bytes[44:48])
+        section.reloff = parse_int(_bytes[48:52])
+        section.nreloc = parse_int(_bytes[52:56])
+        section.flags = parse_int(_bytes[56:60])
+        section.reserved1 = parse_int(_bytes[60:64])
+        section.reserved2 = parse_int(_bytes[64:68])
         return section
 
     def get_size(self):
@@ -248,31 +249,19 @@ class Section64(Section):
     @classmethod
     def parse_from_bytes(cls, _bytes):
         section = cls()
-        section.sectname = _parse_str(_bytes[0:16])
-        section.segname = _parse_str(_bytes[16:32])
-        section.addr = _parse_int(_bytes[32:40])
-        section.size = _parse_int(_bytes[40:48])
-        section.offset = _parse_int(_bytes[48:52])
-        section.align = _parse_int(_bytes[52:56])
-        section.reloff = _parse_int(_bytes[56:60])
-        section.nreloc = _parse_int(_bytes[60:64])
-        section.flags = _parse_int(_bytes[64:68])
-        section.reserved1 = _parse_int(_bytes[68:72])
-        section.reserved2 = _parse_int(_bytes[72:76])
-        section.reserved3 = _parse_int(_bytes[76:80])
+        section.sectname = parse_str(_bytes[0:16])
+        section.segname = parse_str(_bytes[16:32])
+        section.addr = parse_int(_bytes[32:40])
+        section.size = parse_int(_bytes[40:48])
+        section.offset = parse_int(_bytes[48:52])
+        section.align = parse_int(_bytes[52:56])
+        section.reloff = parse_int(_bytes[56:60])
+        section.nreloc = parse_int(_bytes[60:64])
+        section.flags = parse_int(_bytes[64:68])
+        section.reserved1 = parse_int(_bytes[68:72])
+        section.reserved2 = parse_int(_bytes[72:76])
+        section.reserved3 = parse_int(_bytes[76:80])
         return section
 
     def get_size(self):
         return Section.S_TOTAL_SIZE
-
-
-# Inner Function
-def _parse_int(_bytes):
-    temp_bytes = b''
-    for i in range(len(_bytes)):
-        temp_bytes = _bytes[i: i + 1] + temp_bytes
-    return int(temp_bytes.hex(), 16)
-
-
-def _parse_str(_bytes):
-    return _bytes.decode('utf-8')
