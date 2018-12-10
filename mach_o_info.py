@@ -1,12 +1,9 @@
-def _parse_int(_bytes):
-    temp_bytes = b''
-    for i in range(len(_bytes)):
-        temp_bytes = _bytes[i: i + 1] + temp_bytes
-        return int(temp_bytes.hex(), 16)
-
-
-def _parse_str(_bytes):
-    return _bytes.decode('utf-8')
+# The `cpu_type_t` value for Mach-O header
+# https://opensource.apple.com/source/cctools/cctools-836/include/mach/machine.h
+CPU_TYPE_ARM = 0xc
+CPU_TYPE_ARM64 = 0x100000c
+CPU_TYPE_I386 = 0x1000007
+CPU_TYPE_X86_64 = CPU_TYPE_I386
 
 
 class MachBase:
@@ -33,6 +30,9 @@ class MachHeader(MachBase):
     MH_NCMDS_RANGE = (16, 4)
     MH_SIZEOFCMDS_RANGE = (20, 4)
     MH_FLAGS_RANGE = (24, 4)
+
+    MH_MAGIC_32 = 0xfeedface
+    MH_MAGIC_64 = 0xfeedfacf
 
     def __init__(self):
         self.magic = 0
@@ -144,7 +144,7 @@ class SegmentCommand(LoadCommand):
         return sc
 
     def get_size(self):
-        return SegmentCommand.LC_TOTAL_SIZE
+        return SegmentCommand.SC_TOTAL_SIZE
 
 
 class SegmentCommand64(SegmentCommand):
@@ -176,7 +176,7 @@ class SegmentCommand64(SegmentCommand):
         return sc64
 
     def get_size(self):
-        return SegmentCommand64.LC_TOTAL_SIZE
+        return SegmentCommand64.SC_TOTAL_SIZE
 
 
 class Section(MachBase):
@@ -264,3 +264,15 @@ class Section64(Section):
 
     def get_size(self):
         return Section.S_TOTAL_SIZE
+
+
+# Inner Function
+def _parse_int(_bytes):
+    temp_bytes = b''
+    for i in range(len(_bytes)):
+        temp_bytes = _bytes[i: i + 1] + temp_bytes
+    return int(temp_bytes.hex(), 16)
+
+
+def _parse_str(_bytes):
+    return _bytes.decode('utf-8')

@@ -4,6 +4,8 @@ from mach_o_info import *
 
 # TEST_PATH = './Test'
 TEST_PATH = './Target/HotPatchDemo'
+# TEST_PATH = './Target/pinduoduo'
+
 
 # Constant
 FA_CPU_TYPE_KEY = 'cputype'
@@ -91,17 +93,18 @@ def parse_text_from_mach(buffer, offset=0x0):
     else:
         print("Current file is not Mach-O binary")
         return None
+    print('Found the Mach-O file')
 
     lc_pointer = header.get_size()
     for _ in range(header.ncmds):
-        
+
         load_cmd_bytes = buffer[lc_pointer:lc_pointer +
                                 LoadCommand.LC_TOTAL_SIZE]
         load_cmd = LoadCommand.parse_from_bytes(load_cmd_bytes)
 
         if (LoadCommand.LC_SEGMENT != load_cmd.cmd and
                 LoadCommand.LC_SEGMENT_64 != load_cmd.cmd):
-            lc_pointer += load_cmd.get_size()
+            lc_pointer += load_cmd.cmdsize
             continue
 
         is_64_bit = True
@@ -115,9 +118,9 @@ def parse_text_from_mach(buffer, offset=0x0):
                                     SegmentCommand64.SC_TOTAL_SIZE]
             load_cmd = SegmentCommand64.parse_from_bytes(load_cmd_bytes)
 
-        print(load_cmd.segname)
         # parse `__TEXT` segment
         if load_cmd.segname.startswith('__TEXT'):
+            print('Found the `__TEXT` segment')
             section_pointer = lc_pointer + load_cmd.get_size()
 
             for __ in range(load_cmd.nsects):
@@ -134,13 +137,15 @@ def parse_text_from_mach(buffer, offset=0x0):
 
                 # parse `__text` section
                 if section.sectname.startswith('__text'):
-
+                    print('Found the `__text` section')
                     return {
                         'mach_header': header,
                         'text_section': section
                     }
                 section_pointer += section.get_size()
-        lc_pointer += load_cmd.get_size()
+        lc_pointer += load_cmd.cmdsize
+    print('Cannot find `__TEXT` segment or `__text` section')
+    return None
 
 
 if __name__ == "__main__":
@@ -167,42 +172,35 @@ if __name__ == "__main__":
     model = None
     for i in range(len(mach_infos)):
         mach_info = mach_infos[i]
-        # mach_header = mach_info['mach_header']
-        # text_section = mach_info['text_section']
+        mach_header = mach_info['mach_header']
+        text_section = mach_info['text_section']
 
-        # print(mach_header.cputype)
-        # arch = CS_ARCH_ALL
-        # if mach_header.cputype 
-# CS_ARCH_ARM = 0
-# CS_ARCH_ARM64 = 1
-# CS_ARCH_MIPS = 2
-# CS_ARCH_X86 = 3
-# CS_ARCH_PPC = 4
-# CS_ARCH_SPARC = 5
-# CS_ARCH_SYSZ = 6
-# CS_ARCH_XCORE = 7
-# CS_ARCH_MAX = 8
+        arch = CS_ARCH_ALL
+        mode = CS_MODE_32
+        if mach_header.cputype == CPU_TYPE_ARM:
+            arch = CS_ARCH_ARM
+            mode = CS_MODE_THUMB
+        elif mach_header.cputype == CPU_TYPE_ARM64:
+            arch = CS_ARCH_ARM64
+            mode = CS_MODE_ARM
+        elif mach_header.cputype == CPU_TYPE_X86_64:
+            arch = CS_ARCH_X86
+            mode = (CS_MODE_32 if mach_header.magic ==
+                    MachHeader.MH_MAGIC_32 else CS_MODE_64)
+        model = Cs(arch, mode)
 
+        text_addr = (text_section.addr if mach_header.magic ==
+                     MachHeader.MH_MAGIC_32 else (text_section.addr - 0x100000000))
+        text_size = text_section.size
+        machine_code = mach_o_content_bytes[text_addr: text_addr + text_size]
 
-        # code = machine_code['machine_code']
-        # print(code)
-        # print(code[len(code) - 5: len(code)].hex())
-        # offset = machine_code['offset']
-        # arch = machine_code['arch']
         # WARNING!!!
         # 如果机器码太多，反编译过程会中断，不知道为啥
-        # if arch:
-        # model.arch = CS_ARCH_ARM64
-        # model.mode = CS_MODE_ARM
-        # else:
-        # model.arch = CS_ARCH_ARM
-        # model.mode = CS_MODE_THUMB
-        # for (address, size, mnemonic, op_str) in model.disasm_lite(code, offset):
+        for (address, size, mnemonic, op_str) in model.disasm_lite(machine_code, text_section.addr):
             # TODO: 找到函数边界（可以通过 capstone 提供的指令类型）
             # print(address)
-            # print(mnemonic)
+            print(mnemonic)
             # pass
 
-
-# Reference:
-# > https://zhuanlan.zhihu.com/p/24858664
+            # Reference:
+            # > https://zhuanlan.zhihu.com/p/24858664
