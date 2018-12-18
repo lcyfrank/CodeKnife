@@ -17,7 +17,7 @@ class FatHeader(FatBase):
 
     FH_TOTAL_SIZE = 8
     FH_MAGIC_RANGE = (0, 4)
-    FH_NFAT_ARCH_RANGE = (4, 8)
+    FH_NFAT_ARCH_RANGE = (4, 4)
 
     def __init__(self):
         self.magic = 0x0
