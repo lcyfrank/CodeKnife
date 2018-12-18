@@ -3,3 +3,4 @@ Test
 Test.*
 Target
 __pycache__
+.vscode
