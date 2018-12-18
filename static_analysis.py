@@ -17,23 +17,6 @@ FA_SIZE_KEY = 'size'
 FA_ALIGN_KEY = 'align'
 
 
-def parse_int_from_bytes(buffer, begin, length, little=True):
-    '''Parse the integer from given bytes.
-
-    Args:
-        buffer: given bytes
-        begin: begin point in given bytes
-        length: length of parsing part of bytes
-        little: is little end
-    '''
-    if little:
-        temp_buffer = b''
-        for i in range(begin, begin + length):
-            temp_buffer = buffer[i: i + 1] + temp_buffer
-        return int(temp_buffer.hex(), 16)
-    return int(buffer[begin: begin + length].hex(), 16)
-
-
 def parse_fat_binary_if_should(buffer):
     '''Parse the Fat header of Mach-O file.
 
@@ -42,9 +25,6 @@ def parse_fat_binary_if_should(buffer):
     Args:
         buffer: given bytes
     '''
-    fh_field_size = 4  # the size of each field in fat_header
-    fh_number_offset = 4  # the `number` field offset in fat_header
-    fh_size = 8  # the size of total fat_header
 
     if not buffer.startswith(b'\xca\xfe\xba\xbe'):
         # Check if current is fat binary
@@ -52,29 +32,15 @@ def parse_fat_binary_if_should(buffer):
         print("Current file is not fat binary")
         return None
 
-    offset = fh_number_offset
-    end = fh_number_offset + fh_field_size
-    nfat_arch = int(mach_o_content_bytes[offset:end].hex(), 16)
-
-    fa_base = fh_size  # the base address of fat_archs
-    fa_field_size = 4  # the size of each field in fat_arch
-    fa_size = 20  # the size of total fat_arch
+    header = FatHeader.parse_from_bytes(buffer[0:FatHeader.FH_TOTAL_SIZE])
+    nfat_arch = header.nfat_arch
 
     fat_archs = []
-    for fat_num in range(nfat_arch):
-        parse_values = []
-        for j in range(5):
-            begin = fa_base + fat_num * fa_size + fa_field_size * j
-            length = fa_field_size
-            parse_values.append(parse_int_from_bytes(
-                buffer, begin, length, False))
-        fat_archs.append({
-            FA_CPU_TYPE_KEY: parse_values[0],
-            FA_CPU_SUBTYPE_KEY: parse_values[1],
-            FA_OFFSET_KEY: parse_values[2],
-            FA_SIZE_KEY: parse_values[3],
-            FA_ALIGN_KEY: parse_values[4]
-        })
+    for i in range(nfat_arch):
+        fat_arch_begin = header.get_size() + i * FatArch.FA_TOTAL_SIZE
+        fat_arch = FatArch.parse_from_bytes(
+            buffer[fat_arch_begin:fat_arch_begin + FatArch.FA_TOTAL_SIZE])
+        fat_archs.append(fat_arch)
     return fat_archs
 
 
