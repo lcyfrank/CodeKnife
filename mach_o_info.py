@@ -90,6 +90,8 @@ class LoadCommand(MachBase):
 
     LC_SEGMENT = 0x1
     LC_SEGMENT_64 = 0x19
+    LC_SYMTAB = 0x2
+    LC_DYSYMTAB = 0xb
 
     def __init__(self):
         self.cmd = 0
@@ -104,6 +106,108 @@ class LoadCommand(MachBase):
 
     def get_size(self):
         return LoadCommand.LC_TOTAL_SIZE
+
+
+class SymtabCommand(LoadCommand):
+
+    SC_TOTAL_SIZE = 24
+    SC_SYMOFF_RANGE = (8, 4)
+    SC_NSYMS_RANGE = (12, 4)
+    SC_STROFF_RANGE = (16, 4)
+    SC_STRSIZE_RANGE = (20, 4)
+
+    def __init__(self):
+        super().__init__()
+        self.symoff = 0
+        self.nsyms = 0
+        self.stroff = 0
+        self.strsize = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        sc = cls()
+        sc.cmd = parse_int(_bytes[0:4])
+        sc.cmdsize = parse_int(_bytes[4:8])
+        sc.symoff = parse_int(_bytes[8:12])
+        sc.nsyms = parse_int(_bytes[12:16])
+        sc.stroff = parse_int(_bytes[16:20])
+        sc.strsize = parse_int(_bytes[20:24])
+        return sc
+
+    def get_size(self):
+        return SymtabCommand.SC_TOTAL_SIZE
+
+
+class DysymtabCommand(LoadCommand):
+
+    DC_TOTAL_SIZE = 80
+    DC_ILOCALSYM_RANGE = (8, 4)
+    DC_NLOCALSYM_RANGE = (12, 4)
+    DC_IEXTDEFSYM_RANGE = (16, 4)
+    DC_NEXTDEFSYM_RANGE = (20, 4)
+    DC_IUNDEFSYM_RANGE = (24, 4)
+    DC_NUNDEFSYM_RANGE = (28, 4)
+    DC_TOCOFF_RANGE = (32, 4)
+    DC_NTOC_RANGE = (36, 4)
+    DC_MODTABOFF_RANGE = (40, 4)
+    DC_NMODTAB_RANGE = (44, 4)
+    DC_EXTREFSYMOFF_RANGE = (48, 4)
+    DC_NEXTREFSYMS_RANGE = (52, 4)
+    DC_INDIRECTSYMOFF_RANGE = (56, 4)
+    DC_NINDIRECTSYMS_RANGE = (60, 4)
+    DC_EXTRELOFF_RANGE = (64, 4)
+    DC_NEXTREL_RANGE = (68, 4)
+    DC_LOCRELOFF_RANGE = (72, 4)
+    DC_NLOCREL_RANGE = (76, 4)
+
+    def __init__(self):
+        super().__init__()
+        self.ilocalsym = 0
+        self.nlocalsym = 0
+        self.iextdefsym = 0
+        self.nextdefsym = 0
+        self.iundefsym = 0
+        self.nundefsym = 0
+        self.tocoff = 0
+        self.ntoc = 0
+        self.modtaboff = 0
+        self.nmodtab = 0
+        self.extrefsymoff = 0
+        self.nextrefsyms = 0
+        self.indirectsymoff = 0
+        self.nindirectsyms = 0
+        self.extreloff = 0
+        self.nextrel = 0
+        self.locreloff = 0
+        self.nlocrel = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        dc = cls()
+        dc.cmd = parse_int(_bytes[0:4])
+        dc.cmdsize = parse_int(_bytes[4:8])
+        dc.ilocalsym = parse_int(_bytes[8:12])
+        dc.nlocalsym = parse_int(_bytes[12:16])
+        dc.iextdefsym = parse_int(_bytes[16:20])
+        dc.nextdefsym = parse_int(_bytes[20:24])
+        dc.iundefsym = parse_int(_bytes[24:28])
+        dc.nundefsym = parse_int(_bytes[28:32])
+        dc.tocoff = parse_int(_bytes[32:36])
+        dc.ntoc = parse_int(_bytes[36:40])
+        dc.modtaboff = parse_int(_bytes[40:44])
+        dc.nmodtab = parse_int(_bytes[44:48])
+        dc.extrefsymoff = parse_int(_bytes[48:52])
+        dc.nextrefsyms = parse_int(_bytes[52:56])
+        dc.indirectsymoff = parse_int(_bytes[56:60])
+        dc.nindirectsyms = parse_int(_bytes[60:64])
+        dc.extreloff = parse_int(_bytes[64:68])
+        dc.nextrel = parse_int(_bytes[68:72])
+        dc.locreloff = parse_int(_bytes[72:76])
+        dc.nlocrel = parse_int(_bytes[76:80])
+        return dc
+
+    def get_size(self):
+        return DysymtabCommand.DC_TOTAL_SIZE
 
 
 class SegmentCommand(LoadCommand):
