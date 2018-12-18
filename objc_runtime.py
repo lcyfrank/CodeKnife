@@ -1,7 +1,20 @@
 from utils import *
 
 
-class ObjcClass64():
+class ObjcBase():
+
+    def __init__(self):
+        pass
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        return cls()
+
+    def get_size(self):
+        return 0
+
+
+class ObjcClass64(ObjcBase):
 
     OC_TOTAL_SIZE = 40
     OC_METACLASS_RANGE = (0, 8)
@@ -31,7 +44,7 @@ class ObjcClass64():
         return ObjcClass64.OC_TOTAL_SIZE
 
 
-class ObjcData64():
+class ObjcData64(ObjcBase):
 
     OD_TOTAL_SIZE = 72
     OD_FLAGS_RANGE = (0, 4)
@@ -77,3 +90,24 @@ class ObjcData64():
 
     def get_size(self):
         return ObjcData64.OD_TOTAL_SIZE
+
+
+class ObjcMethodList(ObjcBase):
+
+    OM_TOTAL_SIZE = 8
+    OM_FLAGS_RANGE = (0, 4)
+    OM_METHOD_COUNT_RANGE = (4, 4)
+
+    def __init__(self):
+        self.flags = 0
+        self.method_count = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        om = cls()
+        om.flags = parse_int(_bytes[0:4])
+        om.method_count = parse_int(_bytes[4:8])
+        return om
+
+    def get_size(self):
+        return ObjcMethodList.OM_TOTAL_SIZE
