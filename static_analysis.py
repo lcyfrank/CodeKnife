@@ -224,6 +224,12 @@ def parse_out_sections(segment, buffer, offset):
             elif section.sectname.startswith('__objc_classlist'):
                 print("Found the `__objc_classlist` section")
                 sections['objc_classlist'] = section
+            elif section.sectname.startswith('__objc_classname'):
+                print("Found the `__objc_classname` section")
+                sections['objc_classname'] = section
+            elif section.sectname.startswith('__objc_superrefs'):
+                print("Found the `__objc_superrefs` section")
+                sections['objc_superrefs'] = section
 
             section_pointer += section.get_size()
     return sections
@@ -307,8 +313,6 @@ if __name__ == "__main__":
         # ========================== for 64-bit only ===========================
         # ===================== produce `stubs_functions` ======================
         stubs_functions = {}
-        method_name = []
-        objc_methname = None
         segment = segments['__TEXT']
         stubs = segment.sections['stubs']
         indirectsymoff = dysymtab.indirectsymoff
@@ -326,9 +330,41 @@ if __name__ == "__main__":
                 nlist.n_strx)]
             count += 1
 
+        # ============= Parse out all method names and class names =============
+        # ========================== for 64-bit only ===========================
+        # ======================= produce `method_names` =======================
+        method_names = {}
+        class_names = {}
+        segment = segments['__TEXT']
+        objc_methname = segment.sections['objc_methname']
+        base_addr = objc_methname.addr
+        begin_pointer = base_addr if not is_64_bit else base_addr - 0x100000000
+        end_pointer = begin_pointer + objc_methname.size
+        while begin_pointer < end_pointer:
+            name_begin = begin_pointer
+            name_end = mach_o_content_bytes.find(b'\x00', name_begin + 1)
+            name_bytes = mach_o_content_bytes[name_begin:name_end]
+            method_name_key = hex(base_addr)
+            method_names[method_name_key] = parse_str(name_bytes)
+            base_addr += (name_end - name_begin + 1)
+            begin_pointer = name_end + 1
+        objc_classname = segment.sections['objc_classname']
+        base_addr = objc_classname.addr
+        begin_pointer = base_addr if not is_64_bit else base_addr - 0x100000000
+        end_pointer = begin_pointer + objc_classname.size
+        while begin_pointer < end_pointer:
+            name_begin = begin_pointer
+            name_end = mach_o_content_bytes.find(b'\x00', name_begin + 1)
+            name_bytes = mach_o_content_bytes[name_begin:name_end]
+            class_name_key = hex(base_addr)
+            class_names[class_name_key] = parse_str(name_bytes)
+            base_addr += (name_end - name_begin + 1)
+            begin_pointer = name_end + 1
+
         # ======================= Parse out all classes ========================
         # ========================== for 64-bit only ===========================
-        # ===================== produce `stubs_functions` ======================
+        # ====================== produce `class_methods` =======================
+        class_methods = {}
         segment = segments['__DATA']
         objc_classlist = segment.sections['objc_classlist']
         classlist_addr = (objc_classlist.addr if not is_64_bit
@@ -341,41 +377,50 @@ if __name__ == "__main__":
             class_bytes = mach_o_content_bytes[classlist_begin:classlist_begin + each_size]
             oc_bytes_begin = (parse_int(class_bytes) if not is_64_bit
                               else parse_int(class_bytes) - 0x100000000)
-            oc_bytes = mach_o_content_bytes[oc_bytes_begin:oc_bytes_begin+ObjcClass64.OC_TOTAL_SIZE]
+            oc_bytes = mach_o_content_bytes[oc_bytes_begin:
+                                            oc_bytes_begin + ObjcClass64.OC_TOTAL_SIZE]
             objc_class = ObjcClass64.parse_from_bytes(oc_bytes)
-            print(hex(objc_class.data))
+
+            od_bytes_begin = (objc_class.data if not is_64_bit
+                              else objc_class.data - 0x100000000)
+            od_bytes = mach_o_content_bytes[od_bytes_begin:
+                                            od_bytes_begin + ObjcData64.OD_TOTAL_SIZE]
+            objc_data = ObjcData64.parse_from_bytes(od_bytes)
+
+            oml_bytes_begin = (objc_data.base_methods if not is_64_bit
+                               else objc_data.base_methods - 0x100000000)
+            oml_bytes = mach_o_content_bytes[oml_bytes_begin:
+                                             oml_bytes_begin + ObjcMethodList64.OML_TOTAL_SIZE]
+            objc_method_list = ObjcMethodList64.parse_from_bytes(oml_bytes)
+
+            class_name = class_names[hex(objc_data.name)]
+            class_methods[class_name] = []
+            for j in range(objc_method_list.method_count):
+                om_bytes_begin = oml_bytes_begin + objc_method_list.get_size() + j * ObjcMethod64.OM_TOTAL_SIZE
+                om_bytes = mach_o_content_bytes[om_bytes_begin:om_bytes_begin + ObjcMethod64.OM_TOTAL_SIZE]
+                objc_method = ObjcMethod64.parse_from_bytes(om_bytes)
+                objc_method_name = method_names[hex(objc_method.name)]
+                class_methods[class_name].append(objc_method_name)
             count += 1
 
-        #     objc_methname = segment.sections['objc_methname']
+        # ==================== Parse out all super classes =====================
+        # ========================== for 64-bit only ===========================
+        super_classes = {}
+        
 
-        # if segment.segname.startswith('__DATA'):
-        #     objc_selrefs = segment.sections['objc_selrefs']
-        #     selrefs_count = objc_selrefs.size / 8  # 8 is length of address
-        #     count = 0
-        #     while count < selrefs_count:
-        #         name_addr_begin = (objc_selrefs.addr if not is_64_bit
-        #                            else objc_selrefs.addr - 0x100000000)
-        #         name_addr_begin += count * 8
-        #         name_addr_bytes = mach_o_content_bytes[name_addr_begin:name_addr_begin + 8]
-        #         name_addr = parse_int(name_addr_bytes)
-        #         name_begin = (name_addr if not is_64_bit
-        #                       else name_addr - 0x100000000)
-        #         name_end = mach_o_content_bytes.find(
-        #             b'\x00', name_begin + 1)
-        #         name_bytes = mach_o_content_bytes[name_begin:name_end]
-        #         name = parse_str(name_bytes)
 
-        #         print(list(symbol_names.values()).index(name))
+        # ======================= Generate call graphics =======================
+        # ========================== for 64-bit only ===========================
+        # ====================== produce `class_methods` =======================
+        segment = segments['__TEXT']
+        text = segment.sections['text']
+        text_begin = (text.addr if not is_64_bit else text.addr - 0x100000000)
+        text_code = mach_o_content_bytes[text_begin:text_begin + text.size]
+        method_instructions = _slice_by_function_for_arm64(model, text_code, text.addr)
+        for insn in method_instructions[0]:
 
-        #         method_name.append(name)
-        #         count += 1
-
-        # text = segment.sections['text']
-        # text_begin = (text.addr if not is_64_bit
-        #               else text.addr - 0x100000000)
-        # text_code = mach_o_content_bytes[text_begin:text_begin + text.size]
-        # method_instructions = _slice_by_function_for_arm64(
-        #     model, text_code, text.addr)
+            print('0x%s\t0x%s\t%s\t%s' % (hex(insn.address),
+                                              insn.bytes.hex(), insn.mnemonic, insn.op_str))
         # for method in method_instructions:
         #     method_addr = method[0].address
         #     for nlist in symbol_table:
@@ -385,10 +430,6 @@ if __name__ == "__main__":
         #             # print(symbol_names[str(nlist.n_strx)])
         #             break
         # break
-
-        # ======================= Generate call graphics =======================
-        # ========================== for 64-bit only ===========================
-
         # elif segment.segname.startswith('__DATA'):
         #     la_symbol_ptr = segment.sections['la_symbol_ptr']
         #     la_symbol_ptr.describe()
