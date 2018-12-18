@@ -19,6 +19,9 @@ class MachBase:
     def get_size(self):
         return 0
 
+    def describe(self):
+        print(self.__dict__)        
+
 
 class MachHeader(MachBase):
 
