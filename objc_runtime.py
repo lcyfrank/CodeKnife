@@ -92,11 +92,11 @@ class ObjcData64(ObjcBase):
         return ObjcData64.OD_TOTAL_SIZE
 
 
-class ObjcMethodList(ObjcBase):
+class ObjcMethodList64(ObjcBase):
 
-    OM_TOTAL_SIZE = 8
-    OM_FLAGS_RANGE = (0, 4)
-    OM_METHOD_COUNT_RANGE = (4, 4)
+    OML_TOTAL_SIZE = 8
+    OML_FLAGS_RANGE = (0, 4)
+    OML_METHOD_COUNT_RANGE = (4, 4)
 
     def __init__(self):
         self.flags = 0
@@ -104,10 +104,34 @@ class ObjcMethodList(ObjcBase):
 
     @classmethod
     def parse_from_bytes(cls, _bytes):
+        oml = cls()
+        oml.flags = parse_int(_bytes[0:4])
+        oml.method_count = parse_int(_bytes[4:8])
+        return oml
+
+    def get_size(self):
+        return ObjcMethodList64.OML_TOTAL_SIZE
+
+
+class ObjcMethod64(ObjcBase):
+
+    OM_TOTAL_SIZE = 24
+    OM_NAME_RANGE = (0, 8)
+    OM_SIGNATURE_RANGE = (8, 8)
+    OM_IMPLEMENTATION_RANGE = (16, 8)
+
+    def __init__(self):
+        self.name = 0
+        self.signature = 0
+        self.implementation = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
         om = cls()
-        om.flags = parse_int(_bytes[0:4])
-        om.method_count = parse_int(_bytes[4:8])
+        om.name = parse_int(_bytes[0:8])
+        om.signature = parse_int(_bytes[8:16])
+        om.implementation = parse_int(_bytes[16:24])
         return om
 
     def get_size(self):
-        return ObjcMethodList.OM_TOTAL_SIZE
+        return ObjcMethod64.OM_TOTAL_SIZE
