@@ -234,6 +234,7 @@ class SegmentCommand(LoadCommand):
         self.initprot = 0
         self.nsects = 0
         self.flags = 0
+        self.sections = {}
 
     @classmethod
     def parse_from_bytes(cls, _bytes):
