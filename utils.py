@@ -7,4 +7,6 @@ def parse_int(_bytes):
 
 
 def parse_str(_bytes):
-    return _bytes.decode('utf-8')
+    string = _bytes.decode('utf-8')
+    string = string.replace('\x00', '')
+    return string
