@@ -271,8 +271,8 @@ if __name__ == "__main__":
 
         # ===================== Parse out the symbol table =====================
         # =================== same between 32-bit and 64-bit ===================
-        # ====================== produce `symbol_tables` =======================
-        # ====================== produce `symbol_names` ========================
+        # ====================== produce l`symbol_tables` ======================
+        # ====================== produce d`symbol_names` =======================
         symbol_table = []
         symbol_names = {}
         begin_pointer = symtab.symoff
@@ -293,7 +293,7 @@ if __name__ == "__main__":
 
         # ==================== Initialize the DISASM model =====================
         # ================= depend on specified architectures ==================
-        # ========================== produce `model` ===========================
+        # ========================== produce o`model` ==========================
         arch = CS_ARCH_ALL
         mode = CS_MODE_32
         if mach_header.cputype == CPU_TYPE_ARM:
@@ -311,7 +311,7 @@ if __name__ == "__main__":
 
         # ===================== Slice the stubs functions ======================
         # ========================== for 64-bit only ===========================
-        # ===================== produce `stubs_functions` ======================
+        # ===================== produce d`stubs_functions` =====================
         stubs_functions = {}
         segment = segments['__TEXT']
         stubs = segment.sections['stubs']
@@ -332,7 +332,7 @@ if __name__ == "__main__":
 
         # ============= Parse out all method names and class names =============
         # ========================== for 64-bit only ===========================
-        # ======================= produce `method_names` =======================
+        # ====================== produce d`method_names` =======================
         method_names = {}
         class_names = {}
         segment = segments['__TEXT']
@@ -365,6 +365,7 @@ if __name__ == "__main__":
         # ========================== for 64-bit only ===========================
         # ====================== produce `class_methods` =======================
         class_methods = {}
+        super_classes = {}
         segment = segments['__DATA']
         objc_classlist = segment.sections['objc_classlist']
         classlist_addr = (objc_classlist.addr if not is_64_bit
@@ -396,18 +397,37 @@ if __name__ == "__main__":
             class_name = class_names[hex(objc_data.name)]
             class_methods[class_name] = []
             for j in range(objc_method_list.method_count):
-                om_bytes_begin = oml_bytes_begin + objc_method_list.get_size() + j * ObjcMethod64.OM_TOTAL_SIZE
-                om_bytes = mach_o_content_bytes[om_bytes_begin:om_bytes_begin + ObjcMethod64.OM_TOTAL_SIZE]
+                om_bytes_begin = oml_bytes_begin + objc_method_list.get_size() + j * \
+                    ObjcMethod64.OM_TOTAL_SIZE
+                om_bytes = mach_o_content_bytes[om_bytes_begin:
+                                                om_bytes_begin + ObjcMethod64.OM_TOTAL_SIZE]
                 objc_method = ObjcMethod64.parse_from_bytes(om_bytes)
+                print(hex(objc_method.implementation))
+                objc_method_implementation = objc_method.implementation
                 objc_method_name = method_names[hex(objc_method.name)]
-                class_methods[class_name].append(objc_method_name)
+                class_methods[class_name].append(
+                    (objc_method_name, objc_method_implementation))
+
+            super_class_addr = (objc_class.superclass if not is_64_bit
+                                else objc_class.superclass - 0x100000000)
+            if super_class_addr <= 0:
+                # "__Dyld__" means that this superclass is in other dylib.
+                super_classes[class_name] = "__Dyld__"
+            else:
+                super_class_bytes = mach_o_content_bytes[super_class_addr:
+                                                         super_class_addr + ObjcClass64.OC_TOTAL_SIZE]
+                super_class = ObjcClass64.parse_from_bytes(super_class_bytes)
+
+                super_data_bytes_begin = (super_class.data if not is_64_bit
+                                          else super_class.data - 0x100000000)
+                super_data_bytes = mach_o_content_bytes[super_data_bytes_begin:
+                                                        super_data_bytes_begin + ObjcData64.OD_TOTAL_SIZE]
+                super_data = ObjcData64.parse_from_bytes(super_data_bytes)
+                super_name = class_names[hex(super_data.name)]
+                super_classes[class_name] = super_name
+
             count += 1
-
-        # ==================== Parse out all super classes =====================
-        # ========================== for 64-bit only ===========================
-        super_classes = {}
-        
-
+        print(super_classes)
 
         # ======================= Generate call graphics =======================
         # ========================== for 64-bit only ===========================
@@ -416,11 +436,12 @@ if __name__ == "__main__":
         text = segment.sections['text']
         text_begin = (text.addr if not is_64_bit else text.addr - 0x100000000)
         text_code = mach_o_content_bytes[text_begin:text_begin + text.size]
-        method_instructions = _slice_by_function_for_arm64(model, text_code, text.addr)
-        for insn in method_instructions[0]:
+        method_instructions = _slice_by_function_for_arm64(
+            model, text_code, text.addr)
+        # for insn in method_instructions[0]:
 
-            print('0x%s\t0x%s\t%s\t%s' % (hex(insn.address),
-                                              insn.bytes.hex(), insn.mnemonic, insn.op_str))
+        #     print('0x%s\t0x%s\t%s\t%s' % (hex(insn.address),
+        #                                   insn.bytes.hex(), insn.mnemonic, insn.op_str))
         # for method in method_instructions:
         #     method_addr = method[0].address
         #     for nlist in symbol_table:
