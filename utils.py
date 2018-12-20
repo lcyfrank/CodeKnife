@@ -1,3 +1,4 @@
+import ctypes
 # Inner Function
 def parse_int(_bytes):
     temp_bytes = b''
@@ -11,5 +12,31 @@ def parse_str(_bytes):
     string = string.replace('\x00', '')
     return string
 
+
 def log_error(error):
     print("[Error] %s" % (error))
+
+
+def uleb128(_bytes, offset=0x0):
+    p = _bytes[offset]
+    start = offset
+    result = 0
+    bit = 0
+    while True:
+        slice = p & 0x7f
+
+        if bit >= 64 or slice << bit >> bit != slice:
+            log_error("ULEB128 Error!")
+            break
+        else:
+            result |= (slice << bit)
+            bit += 7
+
+        if (p & 0x80 == 0):
+            break
+        offset += 1
+        p = _bytes[offset]
+    result = ctypes.c_int64(result).value
+    return (result, offset - start)
+    
+

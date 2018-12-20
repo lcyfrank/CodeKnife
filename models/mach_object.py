@@ -61,7 +61,9 @@ class MachObject:
         self.function_names = {}    # impaddr: funcname
         self.method_names = {}      # impaddr: (class, method)
         self.class_datas = []       # < name, super_name, methods >
+        self.dylibs = {}            # address: name
 
+        self.parse_dylib_class()
         self.parse_symtab64()
         self.parse_methname()
         self.parse_functions64()
@@ -69,12 +71,6 @@ class MachObject:
         self.parse_class_methods_and_data()
 
         self.text = self.generate_text()
-        print("symbols ================")
-        print(self.symbols)
-        print("function names =========")
-        print(self.function_names)
-        print("method names ===========")
-        print(self.method_names)
 
     def generate_text(self):
         text = self._sections['text']
@@ -82,6 +78,88 @@ class MachObject:
             text.addr if not self.is_64_bit else text.addr - 0x100000000)
         text_code = self.bytes[text_begin:text_begin + text.size]
         return text_code
+
+    def parse_dylib_class(self):
+        _, dyld_info = self._cmds["dyld_info"][0]
+        binding_info_offset = dyld_info.bind_off
+
+        pointer = binding_info_offset
+        is_over = False
+
+        lib_ordinal = 0
+        # symbol_flags = 0
+        # symbol_name = None
+        # symbol_type = 0
+        # symbol_segment = 0
+        base_address = 0x0
+        while not is_over:
+            byte = parse_int(self.bytes[pointer:pointer + 1])
+            opcode = byte & BIND_OPCODE_MASK
+            if opcode == BIND_OPCODE_DONE:
+                is_over = True
+            elif opcode == BIND_OPCODE_SET_DYLIB_ORDINAL_IMM:
+                lib_ordinal = byte & BIND_IMMEDIATE_MASK
+            elif opcode == BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB:
+                pointer += 1
+                lib_ordinal, length = uleb128(self.bytes, pointer)
+                pointer += length
+            elif opcode == BIND_OPCODE_SET_DYLIB_SPECIAL_IMM:
+                immediate = byte & BIND_IMMEDIATE_MASK
+                if immediate == 0:
+                    lib_ordinal = 0
+                else:
+                    sign_extended = immediate | BIND_OPCODE_MASK
+                    lib_ordinal = sign_extended
+            elif opcode == BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM:
+                name_begin = pointer + 1
+                name_end = self.bytes.find(b'\x00', name_begin)
+                symbol_name = parse_str(self.bytes[name_begin:name_end])
+                pointer = name_end
+            elif opcode == BIND_OPCODE_SET_TYPE_IMM:
+                symbol_type = byte & BIND_IMMEDIATE_MASK
+            elif opcode == BIND_OPCODE_SET_ADDEND_SLEB:
+                pass
+            elif opcode == BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB:
+                segment_index = byte & BIND_IMMEDIATE_MASK
+                symbol_segment = segment_index
+                pointer += 1
+                val, length = uleb128(self.bytes, pointer)
+                _, segment = self._cmds["segment64"][segment_index]
+                base_address = segment.vmaddr + val
+                pointer += length
+            elif opcode == BIND_OPCODE_ADD_ADDR_ULEB:
+                pointer += 1
+                val, length = uleb128(self.bytes, pointer)
+                base_address += val
+                pointer += length
+            elif opcode == BIND_OPCODE_DO_BIND:
+                # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
+                self.dylibs[hex(base_address)] = symbol_name
+                base_address += 8
+            elif opcode == BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB:
+                pointer += 1
+                val, length = uleb128(self.bytes, pointer)
+                pointer += length
+                # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
+                self.dylibs[hex(base_address)] = symbol_name
+                base_address += (8 + val)
+            elif opcode == BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED:
+                scale = byte & BIND_IMMEDIATE_MASK
+                # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
+                self.dylibs[hex(base_address)] = symbol_name
+                base_address += (8 + scale * 8)
+            elif opcode == BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
+                pointer += 1
+                count, length = uleb128(self.bytes, pointer)
+                pointer += length + 1
+                skip, length = uleb128(self.bytes, pointer)
+                pointer += length 
+                # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
+                self.dylibs[hex(base_address)] = symbol_name
+                for _ in range(count):
+                    base_address += 8 + skip
+            pointer += 1
+        
 
     def parse_class_methods_and_data(self):
         objc_classlist = self._sections["objc_classlist"]
@@ -128,9 +206,10 @@ class MachObject:
             super_class_addr = (objc_class.superclass if not self.is_64_bit
                                 else objc_class.superclass - 0x100000000)
             if super_class_addr <= 0:
-                # "_SUPER_" means that this superclass is in other dylib.
-                # Placeholder
-                class_data.super = class_name + "_SUPER_"
+                super_name = self.dylibs[hex(parse_int(class_bytes) + 8)]
+                begin = super_name.find("$") + 2
+                super_name = super_name[begin:]
+                class_data.super = super_name
             else:
                 super_class_bytes = self.bytes[super_class_addr:
                                                super_class_addr + ObjcClass64.OC_TOTAL_SIZE]
@@ -139,7 +218,7 @@ class MachObject:
                 super_data_bytes_begin = (super_class.data if not self.is_64_bit
                                           else super_class.data - 0x100000000)
                 super_data_bytes = self.bytes[super_data_bytes_begin:
-                                                        super_data_bytes_begin + ObjcData64.OD_TOTAL_SIZE]
+                                              super_data_bytes_begin + ObjcData64.OD_TOTAL_SIZE]
                 super_data = ObjcData64.parse_from_bytes(super_data_bytes)
                 super_name = self.symbols[hex(super_data.name)]
                 class_data.super = super_name
@@ -246,6 +325,12 @@ class MachObject:
             elif cmd.cmd == LoadCommand.LC_SEGMENT_64:
                 cmd = self.aple_segment64_cmd(lc_pointer)
                 self.insert_cmd("segment64", lc_pointer, cmd, cmds)
+            elif cmd.cmd == LoadCommand.LC_DYLD_INFO or cmd.cmd == LoadCommand.LC_DYLD_INFO_ONLY:
+                cmd = self.apl_dyld_info_cmd(lc_pointer)
+                self.insert_cmd("dyld_info", lc_pointer, cmd, cmds)
+            elif cmd.cmd == LoadCommand.LC_LOAD_DYLIB:
+                cmd = self.apl_load_dylib_cmd(lc_pointer)
+                self.insert_cmd("load_dylib", lc_pointer, cmd, cmds)
             lc_pointer += cmd.cmdsize
         return cmds
 
@@ -260,6 +345,21 @@ class MachObject:
             cmd_bytes = self.bytes[offset:offset +
                                    DysymtabCommand.DC_TOTAL_SIZE]
             return DysymtabCommand.parse_from_bytes(cmd_bytes)
+        return None
+
+    def apl_dyld_info_cmd(self, offset=0x0):
+        if (self.check_aple_cmd(LoadCommand.LC_DYLD_INFO, offset) or
+                self.check_aple_cmd(LoadCommand.LC_DYLD_INFO_ONLY, offset)):
+            cmd_bytes = self.bytes[offset:offset +
+                                   DyldInfoCommand.DIC_TOTAL_SIZE]
+            return DyldInfoCommand.parse_from_bytes(cmd_bytes)
+        return None
+
+    def apl_load_dylib_cmd(self, offset=0x0):
+        if self.check_aple_cmd(LoadCommand.LC_LOAD_DYLIB, offset):
+            cmd_bytes = self.bytes[offset:offset +
+                                   LoadDylibCommand.LDC_TOTAL_SIZE]
+            return LoadDylibCommand.parse_from_bytes(cmd_bytes)
         return None
 
     def aple_segment_cmd(self, offset=0x0):

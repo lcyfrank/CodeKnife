@@ -3,6 +3,7 @@ from utils import *
 FAT_MAGIC = 0xcafebabe
 FAT_CIGAM = 0xbebafeca
 
+
 class FatBase:
 
     def __init__(self):
@@ -15,7 +16,7 @@ class FatBase:
     def get_size(self):
         return 0
 
-    
+
 class FatHeader(FatBase):
 
     FH_TOTAL_SIZE = 8
@@ -38,7 +39,7 @@ class FatHeader(FatBase):
 
 
 class FatArch(FatBase):
-    
+
     FA_TOTAL_SIZE = 20
     FA_CPUTYPE_RANGE = (0, 4)
     FA_CPUSUBTYPE_RANGE = (4, 4)

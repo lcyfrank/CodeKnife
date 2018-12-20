@@ -6,6 +6,35 @@ CPU_TYPE_ARM64 = 0x100000c
 CPU_TYPE_I386 = 0x1000007
 CPU_TYPE_X86_64 = CPU_TYPE_I386
 
+# BIND OPTIONS
+BIND_TYPE_POINTER = 1
+BIND_TYPE_TEXT_ABSOLUTE32 = 2
+BIND_TYPE_TEXT_PCREL32 = 3
+
+BIND_SPECIAL_DYLIB_SELF = 0
+BIND_SPECIAL_DYLIB_MAIN_EXECUTABLE = -1
+BIND_SPECIAL_DYLIB_FLAT_LOOKUP = -2
+
+BIND_SYMBOL_FLAGS_WEAK_IMPORT = 0x1
+BIND_SYMBOL_FLAGS_NON_WEAK_DEFINITION = 0x8
+
+BIND_OPCODE_MASK = 0xF0
+BIND_IMMEDIATE_MASK = 0x0F
+BIND_OPCODE_DONE = 0x00
+BIND_OPCODE_SET_DYLIB_ORDINAL_IMM = 0x10
+BIND_OPCODE_SET_DYLIB_ORDINAL_ULEB = 0x20
+BIND_OPCODE_SET_DYLIB_SPECIAL_IMM = 0x30
+BIND_OPCODE_SET_SYMBOL_TRAILING_FLAGS_IMM = 0x40
+BIND_OPCODE_SET_TYPE_IMM = 0x50
+BIND_OPCODE_SET_ADDEND_SLEB = 0x60
+BIND_OPCODE_SET_SEGMENT_AND_OFFSET_ULEB = 0x70
+BIND_OPCODE_ADD_ADDR_ULEB = 0x80
+BIND_OPCODE_DO_BIND = 0x90
+BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB = 0xA0
+BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED = 0xB0
+BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB = 0xC0
+
+
 
 class MachBase:
 
@@ -88,10 +117,14 @@ class LoadCommand(MachBase):
     LC_CMD_RANGE = (0, 4)
     LC_CMD_CMDSIZE = (4, 8)
 
+    LC_REQ_DYLD = 0x80000000
     LC_SEGMENT = 0x1
-    LC_SEGMENT_64 = 0x19
     LC_SYMTAB = 0x2
     LC_DYSYMTAB = 0xb
+    LC_LOAD_DYLIB = 0xc
+    LC_SEGMENT_64 = 0x19
+    LC_DYLD_INFO = 0x22
+    LC_DYLD_INFO_ONLY = (0x22 | LC_REQ_DYLD)
 
     def __init__(self):
         self.cmd = 0
@@ -106,6 +139,103 @@ class LoadCommand(MachBase):
 
     def get_size(self):
         return LoadCommand.LC_TOTAL_SIZE
+
+
+class DyldInfoCommand(LoadCommand):
+
+    DIC_TOTAL_SIZE = 48
+    DIC_CMD_RANGE = (0, 4)
+    DIC_CMDSIZE_RANGE = (4, 4)
+    DIC_REBASE_OFF_RANGE = (8, 4)
+    DIC_REBASE_SIZE_RANGE = (12, 4)
+    DIC_BIND_OFF_RANGE = (16, 4)
+    DIC_BIND_SIZE_RANGE = (20, 4)
+    DIC_WEAK_BIND_OFF_RANGE = (24, 4)
+    DIC_WEAK_BIND_SIZE_RANGE = (28, 4)
+    DIC_LAZY_BIND_OFF_RANGE = (32, 4)
+    DIC_LAZY_BIND_SIZE_RANGE = (36, 4)
+    DIC_EXPORT_OFF_RANGE = (40, 4)
+    DIC_EXPORT_SIZE_RANGE = (44, 4)
+
+    def __init__(self):
+        super().__init__()
+        self.rebase_off = 0
+        self.rebase_size = 0
+        self.bind_off = 0
+        self.bind_size = 0
+        self.weak_bind_off = 0
+        self.weak_bind_size = 0
+        self.lazy_bind_off = 0
+        self.lazy_bind_size = 0
+        self.export_off = 0
+        self.export_size = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        dic = cls()
+        dic.cmd = parse_int(_bytes[0:4])
+        dic.cmdsize = parse_int(_bytes[4:8])
+        dic.rebase_off = parse_int(_bytes[8:12])
+        dic.rebase_size = parse_int(_bytes[12:16])
+        dic.bind_off = parse_int(_bytes[16:20])
+        dic.bind_size = parse_int(_bytes[20:24])
+        dic.weak_bind_off = parse_int(_bytes[24:28])
+        dic.weak_bind_size = parse_int(_bytes[28:32])
+        dic.lazy_bind_off = parse_int(_bytes[32:36])
+        dic.lazy_bind_size = parse_int(_bytes[36:40])
+        dic.export_off = parse_int(_bytes[40:44])
+        dic.export_size = parse_int(_bytes[44:48])
+        return dic
+
+    def get_size(self):
+        return DyldInfoCommand.DIC_TOTAL_SIZE
+
+
+class LoadDylibCommand(LoadCommand):
+
+    LDC_TOTAL_SIZE = 24
+    LDC_DYLIB_RANGE = (8, 16)
+
+    def __init__(self):
+        self.dylib = None
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        dc = cls()
+        dc.cmd = parse_int(_bytes[0:4])
+        dc.cmdsize = parse_int(_bytes[4:8])
+        dc.dylib = Dylib.parse_from_bytes(_bytes[8:24])
+        return dc
+
+    def get_size(self):
+        return LoadDylibCommand.LDC_TOTAL_SIZE
+
+
+class Dylib:
+
+    D_TOTAL_SIZE = 16
+    D_NAME_RANGE = (0, 4)
+    D_TIMESTAMP_RANGE = (4, 4)
+    D_CURRENT_VERSION_RANGE = (8, 4)
+    D_COMPATIBILITY_VERSION_RANGE = (12, 4)
+
+    def __init__(self):
+        self.name = 0
+        self.timestamp = 0
+        self.current_version = 0
+        self.compatibility_version = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        dylib = cls()
+        dylib.name = parse_int(_bytes[0:4])
+        dylib.timestamp = parse_int(_bytes[4:8])
+        dylib.current_version = parse_int(_bytes[8:12])
+        dylib.compatibility_version = parse_int(_bytes[12:16])
+        return dylib
+
+    def get_size(self):
+        return Dylib.D_TOTAL_SIZE
 
 
 class SymtabCommand(LoadCommand):
