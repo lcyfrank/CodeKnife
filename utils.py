@@ -10,3 +10,6 @@ def parse_str(_bytes):
     string = _bytes.decode('utf-8')
     string = string.replace('\x00', '')
     return string
+
+def log_error(error):
+    print("[Error] %s" % (error))

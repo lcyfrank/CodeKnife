@@ -1,5 +1,8 @@
 from utils import *
 
+FAT_MAGIC = 0xcafebabe
+FAT_CIGAM = 0xbebafeca
+
 class FatBase:
 
     def __init__(self):
