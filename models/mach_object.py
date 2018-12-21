@@ -71,6 +71,7 @@ class MachObject:
         self.parse_class_methods_and_data()
 
         self.text = self.generate_text()
+        self.text_addr = self._sections['text'].addr
 
     def generate_text(self):
         text = self._sections['text']

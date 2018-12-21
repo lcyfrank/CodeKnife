@@ -6,6 +6,7 @@ from capstone.arm import *
 from capstone.x86 import *
 
 from models.mach_object import *
+from interpreters.inner_Interpreter import *
 
 # TEST_PATH = './Test'
 TEST_PATH = './Target/HotPatchDemo'
@@ -46,21 +47,21 @@ FA_ALIGN_KEY = 'align'
 #     return fat_archs
 
 
-# def _slice_by_function_for_arm64(model, machine_code, base_addr):
-#     functions = []
-#     current_function = []
-#     function_over = False
-#     for insn in model.disasm(machine_code, base_addr):
-#         if not function_over:
-#             current_function.append(insn)
-#             if (insn.id == ARM64_INS_RET):
-#                 function_over = True
-#                 functions.append(current_function)
-#         else:
-#             current_function = []
-#             function_over = False
-#             current_function.append(insn)
-#     return functions
+def _slice_by_function_for_arm64(model, machine_code, base_addr):
+    functions = []
+    current_function = []
+    function_over = False
+    for insn in model.disasm(machine_code, base_addr):
+        if not function_over:
+            current_function.append(insn)
+            if (insn.id == ARM64_INS_RET):
+                function_over = True
+                functions.append(current_function)
+        else:
+            current_function = []
+            function_over = False
+            current_function.append(insn)
+    return functions
 
 
 # def parse_out_symtab(buffer, offset=0x0):
@@ -238,6 +239,29 @@ if __name__ == "__main__":
 
     mach_o_file = open(TEST_PATH, 'rb')
     mach_container = MachContainer(mach_o_file.read())
+    for mach_info in mach_container.mach_objects:
+        arch = CS_ARCH_ALL
+        mode = CS_MODE_32
+        if mach_info.cpu_type == CPU_TYPE_ARM:
+            arch = CS_ARCH_ARM
+            mode = CS_MODE_THUMB
+        elif mach_info.cpu_type == CPU_TYPE_ARM64:
+            arch = CS_ARCH_ARM64
+            mode = CS_MODE_ARM
+        elif mach_info.cpu_type == CPU_TYPE_X86_64:
+            arch = CS_ARCH_X86
+            mode = CS_MODE_32 if not mach_info.is_64_bit else CS_MODE_64
+
+        model = Cs(arch, mode)
+        model.detail = True        
+
+        methods = _slice_by_function_for_arm64(model, mach_info.text, mach_info.text_addr)
+        # for method in methods:
+        method = methods[0]
+        inter = Interpreter()
+        inter.interpret_code(method, end=32)
+        inter.current_state()
+            
 
 
     # mach_infos = []
