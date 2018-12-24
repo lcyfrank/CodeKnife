@@ -3,6 +3,8 @@ import ctypes
 from capstone import *
 from capstone.arm64 import *
 
+SELF_POINTER = -0x1000000
+
 
 class Register:
 
@@ -29,10 +31,22 @@ class Register:
         self.low = value & 0xffffffff
 
 
+class FloatRegister:
+
+    def __init__(self, index):
+        self.index = index
+        self.value = 0
+
+    def clear(self):
+        self.value = 0
+
+
 class Interpreter:
 
     def __init__(self):
         self.gen_regs = [Register(i) for i in range(31)]
+        self.float_regs = [FloatRegister(i) for i in range(32)]
+        self.gen_regs[0].value = SELF_POINTER
         self.wzr = Register(-1)
         self.xzr = Register(-1)
         self.wsp = Register(-1)
@@ -59,6 +73,7 @@ class Interpreter:
         self.wsp.clear()
         self.sp.clear()
         self.pc.clear()
+        self.memory = {}
 
     def interpret_code(self, codes, begin=0, end=-1):
         i = begin
@@ -67,10 +82,10 @@ class Interpreter:
         while i < end:
             insn = codes[i]
             if (insn.id == ARM64_INS_SUB or
-                insn.id == ARM64_INS_SBC):
+                    insn.id == ARM64_INS_SBC):
                 self.handle_sub(insn)
             elif (insn.id == ARM64_INS_ADD or
-                insn.id == ARM64_INS_ADC):
+                  insn.id == ARM64_INS_ADC):
                 self.handle_add(insn)
             elif (insn.id == ARM64_INS_STP or
                   insn.id == ARM64_INS_STR or
@@ -109,11 +124,22 @@ class Interpreter:
     def get_register(self, name):
         if name == "sp":
             return self.sp
+        if name == "wzr":
+            return self.wzr
+        if name == "xzr":
+            return self.xzr
+        if name == "wsp":
+            return self.wsp
+        if name == "pc":
+            return self.pc
         if name.startswith("x"):
             reg_index = int(name[1:])
             return self.gen_regs[reg_index]
-        else:
-            print(name)
+        if (name.startswith("v") or
+            name.startswith("d")):
+            reg_index = int(name[1:])
+            return self.float_regs[reg_index]
+        print(name)
 
     def handle_move(self, insn):
         dest_register_name = insn.reg_name(insn.operands[0].reg)
@@ -189,6 +215,7 @@ class Interpreter:
         if dest.type == ARM64_OP_REG:
             reg_name = insn.reg_name(dest.reg)
             register = self.get_register(reg_name)
+            register.is_memory_content = False
             register.value = result
 
     def handle_sub(self, insn):
@@ -212,6 +239,7 @@ class Interpreter:
         if dest.type == ARM64_OP_REG:
             reg_name = insn.reg_name(dest.reg)
             register = self.get_register(reg_name)
+            register.is_memory_content = False
             register.value = result
 
     def handle_adrp(self, insn):
@@ -219,3 +247,4 @@ class Interpreter:
         reg_name = insn.reg_name(insn.operands[0].reg)
         register = self.get_register(reg_name)
         register.value = value
+        register.is_memory_content = False

@@ -25,6 +25,14 @@ class MethodInstructions:
     def insert_instruction(self, instruction):
         self.instructions.append(instruction)
 
+    def describe(self):
+        for ins in self.instructions:
+            ins_str = ins.instruction
+            if ins.goto_insns:
+                class_name, method_name = ins.goto_insns
+                ins_str += (" (" + class_name + ": " + method_name + ")")
+            print(ins_str)
+
 
 class Instruction:
 

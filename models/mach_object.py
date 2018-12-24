@@ -60,7 +60,7 @@ class MachObject:
         self.symbols = {}           # address: name
         self.function_names = {}    # impaddr: funcname
         self.method_names = {}      # impaddr: (class, method)
-        self.class_datas = []       # < name, super_name, methods >
+        self.class_datas = {}       # < name, super_name, methods >
         self.dylibs = {}            # address: name
 
         self.parse_dylib_class()
@@ -72,6 +72,10 @@ class MachObject:
 
         self.text = self.generate_text()
         self.text_addr = self._sections['text'].addr
+
+    def get_memory_content(self, address, size):
+        address = address - 0x100000000
+        return self.bytes[address:address + size]
 
     def generate_text(self):
         text = self._sections['text']
@@ -223,7 +227,7 @@ class MachObject:
                 super_data = ObjcData64.parse_from_bytes(super_data_bytes)
                 super_name = self.symbols[hex(super_data.name)]
                 class_data.super = super_name
-            self.class_datas.append(class_data)
+            self.class_datas[hex(parse_int(class_bytes))] = (class_data)
             count += 1
 
     def parse_classname(self):
@@ -278,6 +282,17 @@ class MachObject:
             stubs_key = hex(stubs.addr + count * each_size)
             self.function_names[stubs_key] = self.symbols[hex(
                 symtab.stroff + nlist.n_strx)]
+            count += 1
+
+        sym_num = symtab.nsyms
+        count = 0
+        while count < sym_num:
+            nlist_begin = symoff + count * nlist_size
+            nlist_bytes = self.bytes[nlist_begin:nlist_begin + nlist_size]
+            nlist = Nlist64.parse_from_bytes(nlist_bytes)
+            if nlist.n_sect == 1:
+                key = hex(nlist.n_value)
+                self.function_names[key] = self.symbols[hex(symtab.stroff + nlist.n_strx)]
             count += 1
 
     def parse_symtab64(self):

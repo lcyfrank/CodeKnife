@@ -7,10 +7,11 @@ from capstone.x86 import *
 
 from models.mach_object import *
 from interpreters.inner_Interpreter import *
+from models.inner_instruction import *
 
 # TEST_PATH = './Test'
-TEST_PATH = './Target/HotPatchDemo'
-# TEST_PATH = './Target/pinduoduo'
+# TEST_PATH = './Target/HotPatchDemo'
+TEST_PATH = './Target/pinduoduo'
 
 # Constant
 FA_CPU_TYPE_KEY = 'cputype'
@@ -256,11 +257,70 @@ if __name__ == "__main__":
         model.detail = True        
 
         methods = _slice_by_function_for_arm64(model, mach_info.text, mach_info.text_addr)
-        # for method in methods:
-        method = methods[0]
-        inter = Interpreter()
-        inter.interpret_code(method, end=32)
-        inter.current_state()
+        print(mach_info.symbols)
+        for method in methods:
+            inter = Interpreter()
+            if hex(method[0].address) not in mach_info.method_names:
+                continue
+            class_name, method_name = mach_info.method_names[hex(method[0].address)]
+            print("===================== %s %s =====================" %(class_name, method_name))
+            class_data = None
+            for data in mach_info.class_datas.values():
+                if data.name == class_name:
+                    class_data = data
+            instruction_block = MethodInstructions(class_name, method)
+            for i in range(len(method)):
+                inter.interpret_code(method, begin=i, end=i+1)
+                cs_insn = method[i]
+                insn_str = hex(cs_insn.address) + '\t' + cs_insn.bytes.hex() + '\t' + cs_insn.mnemonic + '\t' + cs_insn.op_str
+                instruction = Instruction(insn_str)
+                if cs_insn.id == ARM64_INS_BL or cs_insn.id == ARM64_INS_BLR:
+                    operand = cs_insn.operands[0]
+                    if (operand.type == ARM64_OP_IMM):
+                        function_name = mach_info.function_names[hex(operand.imm)]
+                        if function_name == "_objc_msgSendSuper2":
+                            instruction.goto(class_data.super, method_name)
+                        elif function_name == "_objc_msgSend":
+                            reg0_value = inter.gen_regs[0].value
+                            reg1_value = inter.gen_regs[1].value
+                            obj_name = ""
+                            if reg0_value == SELF_POINTER:
+                                obj_name = class_name
+                            else:
+                                obj_name_key = hex(reg0_value)
+                                if obj_name_key in mach_info.dylibs:
+                                    obj_name = mach_info.dylibs[obj_name_key]
+                                    obj_name_index = obj_name.find('$')
+                                    obj_name = obj_name[obj_name_index + 2:]
+                                else:
+                                    obj_address = parse_int(mach_info.get_memory_content(reg0_value, 8))
+                                    obj_name = mach_info.class_datas[hex(obj_address)].name
+
+                            meth_address = parse_int(mach_info.get_memory_content(reg1_value, 8))
+                            meth_name_key = hex(meth_address)
+                            meth_name = mach_info.symbols[meth_name_key]
+                            instruction.goto(obj_name, meth_name)
+                instruction_block.insert_instruction(instruction)
+            instruction_block.describe()
+
+        # inter.interpret_code(method, end=32)
+        # inter.current_state()
+
+        # insn_addr = method_instructions[0][0].address
+        # class_name = ClassStorage.class_name_of_addr(hex(insn_addr))
+        # method_name = ClassStorage.method_name_of_addr(hex(insn_addr))
+        # instruction_block = MethodInstructions(class_name, method_name)
+
+        # for i in range(len(method_instructions[0])):
+        #     cs_insn = method_instructions[0][i]
+        #     insn_str = hex(cs_insn.address) + '\t' + cs_insn.bytes.hex() + '\t' + cs_insn.mnemonic + '\t' + cs_insn.op_str
+        #     instruction = Instruction(insn_str)
+        #     if cs_insn.id == ARM64_INS_BL or cs_insn.id == ARM64_INS_BLR:
+        #         # Parse each call
+        #         operand = cs_insn.operands[0]
+        #         if (operand.type == ARM64_OP_IMM):
+        #             function_name = stubs_functions[hex(operand.imm)]
+                    # if 'msgSendSuper2' in function_name: 
             
 
 
