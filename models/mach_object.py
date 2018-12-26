@@ -6,6 +6,8 @@ from models.mach_o.nlist import *
 from models.objc_runtime import *
 from models.class_storage import *
 
+SELF_POINTER = -0x1000000
+
 
 class MachContainer:
 
@@ -34,8 +36,9 @@ class MachContainer:
     def aple_arch(self, i):
         header = self.aple_header()
         if i < header.nfat_arch:
-            fat_arch_bytes = self.bytes[header.get_size(
-            ) + i * FatArch.FA_TOTAL_SIZE]
+            fat_arch_begin = header.get_size() + i * FatArch.FA_TOTAL_SIZE
+            fat_arch_end = fat_arch_begin + FatArch.FA_TOTAL_SIZE
+            fat_arch_bytes = self.bytes[fat_arch_begin:fat_arch_end]
             return FatArch.parse_from_bytes(fat_arch_bytes)
         error = ("The index " + str(i) + " is beyond the "
                  "fat architecture's number which is " + str(self.nfat_arch) + ".")
@@ -58,31 +61,82 @@ class MachObject:
         self._sections = self.aple_sections()
 
         self.symbols = {}           # address: name
-        self.function_names = {}    # impaddr: funcname
-        self.method_names = {}      # impaddr: (class, method)
-        self.class_datas = {}       # < name, super_name, methods >
-        self.dylibs = {}            # address: name
+        self.ivar_refs = {}         # <> : index
+
+        self.dylibs = {}            # ref_address: name
+        self.functions = {}         # impaddr: symbol_address
+        self.ivars = {}             # ref_address: <ivar>
+
+        self.methods = {}           # impaddr: (class, method)
+        self.class_datas = {}       # data_address: < name, super_name, methods >
 
         self.parse_dylib_class()
+
         self.parse_symtab64()
         self.parse_methname()
-        self.parse_functions64()
         self.parse_classname()
+        self.parse_cstring()
+        self.parse_methtype()
+
+        self.parse_functions64()
         self.parse_class_methods_and_data()
+        self.parse_ivars()
 
         self.text = self.generate_text()
-        self.text_addr = self._sections['text'].addr
+        text_section, _ = self._sections['text']
+        self.text_addr = text_section.addr
 
     def get_memory_content(self, address, size):
-        address = address - 0x100000000
-        return self.bytes[address:address + size]
+        address_key = hex(address)
+        if address_key in self.dylibs:
+            return self.dylibs[address_key]
+        elif address_key in self.functions:
+            return self.functions[address_key]
+        elif address_key in self.ivars:
+            return self.ivars[address_key]
+        else:
+            if hex(address - SELF_POINTER) in self.ivar_refs:
+                return self.ivar_refs[hex(address - SELF_POINTER)]
+            else:
+                address = address - 0x100000000
+                return parse_int(self.bytes[address:address + size])
 
     def generate_text(self):
-        text = self._sections['text']
+        text, _ = self._sections['text']
         text_begin = (
             text.addr if not self.is_64_bit else text.addr - 0x100000000)
         text_code = self.bytes[text_begin:text_begin + text.size]
         return text_code
+
+    # 这个函数等会儿再改
+    def parse_ivars(self):
+        pass
+        # _, symtab = self._cmds["symtab"][0]
+        # _, ivar_index = self._sections["objc_ivar"]
+        # symoff = symtab.symoff
+        # nlist_size = Nlist64.N_TOTAL_SIZE
+        # sym_num = symtab.nsyms
+        # count = 0
+        # while count < sym_num:
+        #     nlist_begin = symoff + count * nlist_size
+        #     nlist_bytes = self.bytes[nlist_begin:nlist_begin + nlist_size]
+        #     nlist = Nlist64.parse_from_bytes(nlist_bytes)
+        #     if nlist.n_sect == ivar_index:
+        #         key = hex(nlist.n_value)
+        #         symbol_key = hex(symtab.stroff + nlist.n_strx + 0x100000000)
+        #         name = self.symbols[symbol_key]
+        #         class_name_begin = name.find("$") + 2
+        #         class_name_end = name.find(".")
+        #         class_name = name[class_name_begin:class_name_end]
+        #         ivar_name = name[class_name_end + 1:]
+        #         ivar = IvarData(ivar_name, class_name)
+        #         ivar_ref_addr = nlist.n_value - 0x100000000 if self.is_64_bit else nlist.n_value
+        #         ivar_ref = parse_int(
+        #             self.bytes[ivar_ref_addr:ivar_ref_addr + 8])
+        #         self.ivars[key] = ivar_ref
+        #         self.ivar_list.append(ivar)
+        #         self.ivar_refs[hex(ivar_ref)] = len(self.ivar_list) - 1
+        #     count += 1
 
     def parse_dylib_class(self):
         _, dyld_info = self._cmds["dyld_info"][0]
@@ -93,9 +147,10 @@ class MachObject:
 
         lib_ordinal = 0
         # symbol_flags = 0
-        # symbol_name = None
+        symbol_name = None
         # symbol_type = 0
         # symbol_segment = 0
+        symbol_key = None
         base_address = 0x0
         while not is_over:
             byte = parse_int(self.bytes[pointer:pointer + 1])
@@ -119,6 +174,9 @@ class MachObject:
                 name_begin = pointer + 1
                 name_end = self.bytes.find(b'\x00', name_begin)
                 symbol_name = parse_str(self.bytes[name_begin:name_end])
+                symbol_key = hex(
+                    name_begin + 0x100000000) if self.is_64_bit else hex(name_begin)
+                self.symbols[symbol_key] = symbol_name
                 pointer = name_end
             elif opcode == BIND_OPCODE_SET_TYPE_IMM:
                 symbol_type = byte & BIND_IMMEDIATE_MASK
@@ -139,35 +197,34 @@ class MachObject:
                 pointer += length
             elif opcode == BIND_OPCODE_DO_BIND:
                 # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
-                self.dylibs[hex(base_address)] = symbol_name
+                self.dylibs[hex(base_address)] = int(symbol_key, 16)
                 base_address += 8
             elif opcode == BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB:
                 pointer += 1
                 val, length = uleb128(self.bytes, pointer)
                 pointer += length
                 # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
-                self.dylibs[hex(base_address)] = symbol_name
+                self.dylibs[hex(base_address)] = int(symbol_key, 16)
                 base_address += (8 + val)
             elif opcode == BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED:
                 scale = byte & BIND_IMMEDIATE_MASK
                 # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
-                self.dylibs[hex(base_address)] = symbol_name
+                self.dylibs[hex(base_address)] = int(symbol_key, 16)
                 base_address += (8 + scale * 8)
             elif opcode == BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB:
                 pointer += 1
                 count, length = uleb128(self.bytes, pointer)
                 pointer += length + 1
                 skip, length = uleb128(self.bytes, pointer)
-                pointer += length 
+                pointer += length
                 # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
-                self.dylibs[hex(base_address)] = symbol_name
                 for _ in range(count):
+                    self.dylibs[hex(base_address)] = int(symbol_key, 16)
                     base_address += 8 + skip
             pointer += 1
-        
 
     def parse_class_methods_and_data(self):
-        objc_classlist = self._sections["objc_classlist"]
+        objc_classlist, _ = self._sections["objc_classlist"]
         classlist_addr = (
             objc_classlist.addr if not self.is_64_bit else objc_classlist.addr - 0x100000000)
         total_size = objc_classlist.size
@@ -204,14 +261,39 @@ class MachObject:
                 objc_method = ObjcMethod64.parse_from_bytes(om_bytes)
                 objc_method_implementation = objc_method.implementation
                 objc_method_name = self.symbols[hex(objc_method.name)]
-                self.method_names[hex(objc_method_implementation)] = (
+                self.methods[hex(objc_method_implementation)] = (
                     class_name, objc_method_name)
                 class_data.insert_method(objc_method_name)
+
+            if objc_data.ivar != 0:
+                oil_bytes_begin = (objc_data.ivar if not self.is_64_bit
+                                else objc_data.ivar - 0x100000000)
+                oil_bytes = self.bytes[oil_bytes_begin:oil_bytes_begin + ObjcIvars64.OI_TOTAL_SIZE]
+                objc_ivars = ObjcIvars64.parse_from_bytes(oil_bytes)
+                for j in range(objc_ivars.count):
+                    oi_bytes_begin = oil_bytes_begin + objc_ivars.get_size() + j * ObjcIvar64.OI_TOTAL_SIZE
+                    oi_bytes = self.bytes[oi_bytes_begin:oi_bytes_begin + ObjcIvar64.OI_TOTAL_SIZE]
+                    objc_ivar = ObjcIvar64.parse_from_bytes(oi_bytes)
+                    objc_ivar_name = self.symbols[hex(objc_ivar.name)]
+
+                    objc_ivar_type = self.symbols[hex(objc_ivar.type)]
+                    objc_ivar_type_begin = objc_ivar_type.find("@\"") + 2
+                    objc_ivar_type_end = objc_ivar_type.find("\"", objc_ivar_type_begin)
+                    objc_ivar_type = objc_ivar_type[objc_ivar_type_begin:objc_ivar_type_end]
+                    ivar = IvarData(objc_ivar_name, objc_ivar_type)
+                    class_data.insert_ivar(ivar)
+
+                    ivar_offset_pointer = objc_ivar.offset_pointer
+                    ivar_offset_begin = ivar_offset_pointer if not self.is_64_bit else ivar_offset_pointer - 0x100000000
+                    ivar_offset = parse_int(self.bytes[ivar_offset_begin:ivar_offset_begin + 8])
+                    self.ivars[hex(ivar_offset_pointer)] = ivar_offset
+                    self.ivar_refs[hex(ivar_offset)] = len(class_data.ivars) - 1
 
             super_class_addr = (objc_class.superclass if not self.is_64_bit
                                 else objc_class.superclass - 0x100000000)
             if super_class_addr <= 0:
-                super_name = self.dylibs[hex(parse_int(class_bytes) + 8)]
+                _super = self.dylibs[hex(parse_int(class_bytes) + 8)]
+                super_name = self.symbols[hex(_super)]
                 begin = super_name.find("$") + 2
                 super_name = super_name[begin:]
                 class_data.super = super_name
@@ -230,8 +312,36 @@ class MachObject:
             self.class_datas[hex(parse_int(class_bytes))] = (class_data)
             count += 1
 
+    def parse_methtype(self):
+        methtype, _ = self._sections["objc_methtype"]
+        base_addr = methtype.addr
+        begin_pointer = base_addr if not self.is_64_bit else base_addr - 0x100000000
+        end_pointer = begin_pointer + methtype.size
+        while begin_pointer < end_pointer:
+            name_begin = begin_pointer
+            name_end = self.bytes.find(b'\x00', name_begin + 1)
+            name_bytes = self.bytes[name_begin:name_end]
+            methtype_key = hex(base_addr)
+            self.symbols[methtype_key] = parse_str(name_bytes)
+            base_addr += (name_end - name_begin + 1)
+            begin_pointer = name_end + 1
+
+    def parse_cstring(self):
+        cstring, _ = self._sections["cstring"]
+        base_addr = cstring.addr
+        begin_pointer = base_addr if not self.is_64_bit else base_addr - 0x100000000
+        end_pointer = begin_pointer + cstring.size
+        while begin_pointer < end_pointer:
+            name_begin = begin_pointer
+            name_end = self.bytes.find(b'\x00', name_begin + 1)
+            name_bytes = self.bytes[name_begin:name_end]
+            cstring_key = hex(base_addr)
+            self.symbols[cstring_key] = parse_str(name_bytes)
+            base_addr += (name_end - name_begin + 1)
+            begin_pointer = name_end + 1
+
     def parse_classname(self):
-        objc_classname = self._sections["objc_classname"]
+        objc_classname, _ = self._sections["objc_classname"]
         base_addr = objc_classname.addr
         begin_pointer = base_addr if not self.is_64_bit else base_addr - 0x100000000
         end_pointer = begin_pointer + objc_classname.size
@@ -245,7 +355,7 @@ class MachObject:
             begin_pointer = name_end + 1
 
     def parse_methname(self):
-        objc_methname = self._sections["objc_methname"]
+        objc_methname, _ = self._sections["objc_methname"]
         base_addr = objc_methname.addr
         begin_pointer = base_addr if not self.is_64_bit else base_addr - 0x100000000
         end_pointer = begin_pointer + objc_methname.size
@@ -261,7 +371,8 @@ class MachObject:
     def parse_functions64(self):
         _, dysymtab = self._cmds["dysymtab"][0]
         _, symtab = self._cmds["symtab"][0]
-        stubs = self._sections["stubs"]
+        stubs, _ = self._sections["stubs"]
+        _, text_index = self._sections["text"]
 
         symoff = symtab.symoff
         nlist_size = Nlist64.N_TOTAL_SIZE
@@ -280,8 +391,12 @@ class MachObject:
             nlist_bytes = self.bytes[nlist_begin:nlist_begin + nlist_size]
             nlist = Nlist64.parse_from_bytes(nlist_bytes)
             stubs_key = hex(stubs.addr + count * each_size)
-            self.function_names[stubs_key] = self.symbols[hex(
-                symtab.stroff + nlist.n_strx)]
+            # self.function_names[stubs_key] = self.symbols[hex(
+            # symtab.stroff + nlist.n_strx)]
+            symbol_addr = symtab.stroff + nlist.n_strx
+            if self.is_64_bit:
+                symbol_addr += 0x100000000
+            self.functions[stubs_key] = (symbol_addr)
             count += 1
 
         sym_num = symtab.nsyms
@@ -290,9 +405,14 @@ class MachObject:
             nlist_begin = symoff + count * nlist_size
             nlist_bytes = self.bytes[nlist_begin:nlist_begin + nlist_size]
             nlist = Nlist64.parse_from_bytes(nlist_bytes)
-            if nlist.n_sect == 1:
+            if nlist.n_sect == text_index:
                 key = hex(nlist.n_value)
-                self.function_names[key] = self.symbols[hex(symtab.stroff + nlist.n_strx)]
+                # self.function_names[key] = self.symbols[hex(
+                # symtab.stroff + nlist.n_strx)]
+                symbol_addr = symtab.stroff + nlist.n_strx
+                if self.is_64_bit:
+                    symbol_addr += 0x100000000
+                self.functions[key] = (symbol_addr)
             count += 1
 
     def parse_symtab64(self):
@@ -307,7 +427,9 @@ class MachObject:
             name_end = self.bytes.find(b'\x00', name_begin + 1)
             name_bytes = self.bytes[name_begin:name_end]
             name = parse_str(name_bytes)
-            self.symbols[hex(name_begin)] = name
+            symbol_key = hex(
+                name_begin + 0x100000000) if self.is_64_bit else hex(name_begin)
+            self.symbols[symbol_key] = name
             begin_pointer += nlist.get_size()
 
     def aple_header(self):
@@ -415,6 +537,8 @@ class MachObject:
             segments = cmds["segment64"]
         else:
             segments = cmds["segment"]
+
+        total_sect_count = 1
         for offset, segment in segments:
 
             if (type(segment) != SegmentCommand and
@@ -433,30 +557,10 @@ class MachObject:
                                                    section_pointer + Section.S_TOTAL_SIZE]
                         section = Section.parse_from_bytes(section_bytes)
 
-                    if section.sectname.startswith('__text'):
-                        print("Found the `__text` section")
-                        sections['text'] = section
-                    elif section.sectname.startswith('__stubs'):
-                        print("Found the `__stubs` section")
-                        sections['stubs'] = section
-                    elif section.sectname.startswith('__la_symbol_ptr'):
-                        print("Found the `__la_symbol_ptr` section")
-                        sections['la_symbol_ptr'] = section
-                    elif section.sectname.startswith('__objc_selrefs'):
-                        print("Found the `__objc_selrefs` section")
-                        sections['objc_selrefs'] = section
-                    elif section.sectname.startswith('__objc_methname'):
-                        print("Found the `__objc_methname` section")
-                        sections['objc_methname'] = section
-                    elif section.sectname.startswith('__objc_classlist'):
-                        print("Found the `__objc_classlist` section")
-                        sections['objc_classlist'] = section
-                    elif section.sectname.startswith('__objc_classname'):
-                        print("Found the `__objc_classname` section")
-                        sections['objc_classname'] = section
-                    elif section.sectname.startswith('__objc_superrefs'):
-                        print("Found the `__objc_superrefs` section")
-                        sections['objc_superrefs'] = section
-
+                    section_name = section.sectname
+                    print("Found the `%s` section" % (section_name))
+                    section_name = section_name[2:]
+                    sections[section_name] = (section, total_sect_count)
+                    total_sect_count += 1
                     section_pointer += section.get_size()
         return sections

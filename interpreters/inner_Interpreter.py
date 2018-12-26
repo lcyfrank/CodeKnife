@@ -4,7 +4,7 @@ from capstone import *
 from capstone.arm64 import *
 
 SELF_POINTER = -0x1000000
-
+SUPER_POINTER = -0x2000000
 
 class Register:
 
@@ -12,12 +12,12 @@ class Register:
         self.index = index
         self.low = ctypes.c_int32(0).value
         self.high = ctypes.c_int32(0).value
-        self.is_memory_content = False
+        # self.is_memory_content = False
 
     def clear(self):
         self.low = ctypes.c_int32(0).value
         self.high = ctypes.c_int32(0).value
-        self.is_memory_content = False
+        # self.is_memory_content = False
 
     @property
     def value(self):
@@ -40,10 +40,17 @@ class FloatRegister:
     def clear(self):
         self.value = 0
 
+    # @property
+    # def is_memory_content(self):
+    #     return False
+
+    # @is_memory_content.setter
+    # def is_memory_content(self, value):
+    #     pass
 
 class Interpreter:
 
-    def __init__(self):
+    def __init__(self, memory_provider=None):
         self.gen_regs = [Register(i) for i in range(31)]
         self.float_regs = [FloatRegister(i) for i in range(32)]
         self.gen_regs[0].value = SELF_POINTER
@@ -52,7 +59,8 @@ class Interpreter:
         self.wsp = Register(-1)
         self.sp = Register(-1)
         self.pc = Register(-1)
-        self.memory = {}
+        self.memory = {hex(0-0x30):SUPER_POINTER}
+        self.memory_provider = memory_provider
 
     def current_state(self):
         for i in range(len(self.gen_regs)):
@@ -73,7 +81,7 @@ class Interpreter:
         self.wsp.clear()
         self.sp.clear()
         self.pc.clear()
-        self.memory = {}
+        self.memory = {hex(0-0x30):SUPER_POINTER}
 
     def interpret_code(self, codes, begin=0, end=-1):
         i = begin
@@ -132,11 +140,16 @@ class Interpreter:
             return self.wsp
         if name == "pc":
             return self.pc
-        if name.startswith("x"):
+        if (name.startswith("x") or
+            name.startswith("w")):
             reg_index = int(name[1:])
             return self.gen_regs[reg_index]
         if (name.startswith("v") or
-            name.startswith("d")):
+            name.startswith("d") or
+            name.startswith("q") or
+            name.startswith("s") or
+            name.startswith("h") or
+            name.startswith("b")):
             reg_index = int(name[1:])
             return self.float_regs[reg_index]
         print(name)
@@ -148,11 +161,12 @@ class Interpreter:
         source = insn.operands[1]
         if source.type == ARM64_OP_IMM:
             source_value = source.imm
-            dest_register.is_memory_content = False
+            # dest_register.is_memory_content = False
+            dest_register.bias = 0
         elif source.type == ARM64_OP_REG:
             source_register = self.get_register(insn.reg_name(source.reg))
             source_value = source_register.value
-            dest_register.is_memory_content = source_register.is_memory_content
+            # dest_register.is_memory_content = source_register.is_memory_content
         dest_register.value = source_value
 
     def handle_load_register(self, insn):
@@ -160,7 +174,7 @@ class Interpreter:
         memory_reg_name = insn.reg_name(memory_operand.base)
         memory_reg = self.get_register(memory_reg_name)
         memory_disp = memory_operand.disp
-        memory = memory_reg.value + memory_disp
+        memory = memory_reg.value + memory_disp            
         for j in range(0, len(insn.operands) - 1):
             operand = insn.operands[j]
             if operand.type == ARM64_OP_REG:
@@ -168,15 +182,15 @@ class Interpreter:
                 register = self.get_register(reg_name)
                 if hex(memory + j * 8) in self.memory:
                     memory_value = self.memory[hex(memory + j * 8)]
-                    if type(memory_value) == str:
-                        register.is_memory_content = True
-                        register.value = int(memory_value[1:])
-                    else:
-                        register.is_memory_content = False
-                        register.value = self.memory[hex(memory + j * 8)]
+                    register.value = memory_value
                 else:
-                    register.is_memory_content = True
-                    register.value = memory + j * 8
+                    if self.memory_provider != None:
+                        memory_value = self.memory_provider(memory + j * 8)
+                    else:
+                        memory_value = 0
+                    self.memory[hex(memory + j * 8)] = memory_value
+                    # register.is_memory_content = False
+                    register.value = self.memory[hex(memory + j * 8)]
 
     def handle_load_pair(self, insn):
         self.handle_load_register(insn)
@@ -192,11 +206,7 @@ class Interpreter:
             if operand.type == ARM64_OP_REG:
                 reg_name = insn.reg_name(operand.reg)
                 register = self.get_register(reg_name)
-                if register.is_memory_content:
-                    memory_value = "$" + str(register.value)
-                    self.memory[hex(memory + j * 8)] = memory_value
-                else:
-                    self.memory[hex(memory + j * 8)] = register.value
+                self.memory[hex(memory + j * 8)] = register.value
 
     def handle_store_pair(self, insn):
         self.handle_store_register(insn)
@@ -215,7 +225,7 @@ class Interpreter:
         if dest.type == ARM64_OP_REG:
             reg_name = insn.reg_name(dest.reg)
             register = self.get_register(reg_name)
-            register.is_memory_content = False
+            # register.is_memory_content = False
             register.value = result
 
     def handle_sub(self, insn):
@@ -239,7 +249,6 @@ class Interpreter:
         if dest.type == ARM64_OP_REG:
             reg_name = insn.reg_name(dest.reg)
             register = self.get_register(reg_name)
-            register.is_memory_content = False
             register.value = result
 
     def handle_adrp(self, insn):
@@ -247,4 +256,3 @@ class Interpreter:
         reg_name = insn.reg_name(insn.operands[0].reg)
         register = self.get_register(reg_name)
         register.value = value
-        register.is_memory_content = False

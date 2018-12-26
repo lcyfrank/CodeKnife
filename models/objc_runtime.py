@@ -135,3 +135,54 @@ class ObjcMethod64(ObjcBase):
 
     def get_size(self):
         return ObjcMethod64.OM_TOTAL_SIZE
+
+
+class ObjcIvars64(ObjcBase):
+
+    OI_TOTAL_SIZE = 8
+    OI_ENTSIZE_RANGE = (0, 4)
+    OI_COUNT_RANGE = (4, 4)
+
+    def __init__(self):
+        self.entsize = 0
+        self.count = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        oi = cls()
+        oi.entsize = parse_int(_bytes[0:4])
+        oi.count = parse_int(_bytes[4:8])
+        return oi
+
+    def get_size(self):
+        return ObjcIvars64.OI_TOTAL_SIZE
+
+
+class ObjcIvar64(ObjcBase):
+
+    OI_TOTAL_SIZE = 32
+    OI_OFFSET_POINTER_RANGE = (0, 8)
+    OI_NAME_RANGE = (8, 8)
+    OI_TYPE_RANGE = (16, 8)
+    OI_UNKNOWN_RANGE = (24, 4)
+    OI_SIZE_RANGE = (28, 4)
+
+    def __init__(self):
+        self.offset_pointer = 0
+        self.name = 0
+        self.type = 0
+        self.unknown = 0
+        self.size = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        oi = cls()
+        oi.offset_pointer = parse_int(_bytes[0:8])
+        oi.name = parse_int(_bytes[8:16])
+        oi.type = parse_int(_bytes[16:24])
+        oi.unknown = parse_int(_bytes[24:28])
+        oi.size = parse_int(_bytes[28:32])
+        return oi
+
+    def get_size(self):
+        return ObjcIvar64.OI_TOTAL_SIZE

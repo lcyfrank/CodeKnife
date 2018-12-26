@@ -11,7 +11,8 @@ from models.inner_instruction import *
 
 # TEST_PATH = './Test'
 # TEST_PATH = './Target/HotPatchDemo'
-TEST_PATH = './Target/pinduoduo'
+# TEST_PATH = './Target/pinduoduo'
+TEST_PATH = './Target/AccountBook'
 
 # Constant
 FA_CPU_TYPE_KEY = 'cputype'
@@ -257,12 +258,16 @@ if __name__ == "__main__":
         model.detail = True        
 
         methods = _slice_by_function_for_arm64(model, mach_info.text, mach_info.text_addr)
-        print(mach_info.symbols)
         for method in methods:
-            inter = Interpreter()
-            if hex(method[0].address) not in mach_info.method_names:
+            def memory_provider(address):
+                try:
+                    return mach_info.get_memory_content(address, 8)
+                except Exception as _:
+                    return 0
+            inter = Interpreter(memory_provider)
+            if hex(method[0].address) not in mach_info.methods:  # pass the functions
                 continue
-            class_name, method_name = mach_info.method_names[hex(method[0].address)]
+            class_name, method_name = mach_info.methods[hex(method[0].address)]
             print("===================== %s %s =====================" %(class_name, method_name))
             class_data = None
             for data in mach_info.class_datas.values():
@@ -277,7 +282,8 @@ if __name__ == "__main__":
                 if cs_insn.id == ARM64_INS_BL or cs_insn.id == ARM64_INS_BLR:
                     operand = cs_insn.operands[0]
                     if (operand.type == ARM64_OP_IMM):
-                        function_name = mach_info.function_names[hex(operand.imm)]
+                        function = mach_info.functions[hex(operand.imm)]
+                        function_name = mach_info.symbols[hex(function)]
                         if function_name == "_objc_msgSendSuper2":
                             instruction.goto(class_data.super, method_name)
                         elif function_name == "_objc_msgSend":
@@ -286,20 +292,25 @@ if __name__ == "__main__":
                             obj_name = ""
                             if reg0_value == SELF_POINTER:
                                 obj_name = class_name
+                            elif reg0_value < 0:
+                                obj_name = class_data.super
                             else:
                                 obj_name_key = hex(reg0_value)
-                                if obj_name_key in mach_info.dylibs:
-                                    obj_name = mach_info.dylibs[obj_name_key]
+                                if obj_name_key in mach_info.symbols:  # Outter classes
+                                    obj_name = mach_info.symbols[obj_name_key]
                                     obj_name_index = obj_name.find('$')
                                     obj_name = obj_name[obj_name_index + 2:]
-                                else:
-                                    obj_address = parse_int(mach_info.get_memory_content(reg0_value, 8))
-                                    obj_name = mach_info.class_datas[hex(obj_address)].name
+                                elif obj_name_key in mach_info.class_datas:  # Inner classes
+                                    obj_data = mach_info.class_datas[obj_name_key]
+                                    obj_name = obj_data.name
+                                elif reg0_value < len(class_data.ivars):  # guess ivars
+                                    ivar = class_data.ivars[reg0_value]
+                                    obj_name = class_name + "->" + ivar.name
 
-                            meth_address = parse_int(mach_info.get_memory_content(reg1_value, 8))
-                            meth_name_key = hex(meth_address)
-                            meth_name = mach_info.symbols[meth_name_key]
+                            meth_name = mach_info.symbols[hex(reg1_value)]
                             instruction.goto(obj_name, meth_name)
+                        else:
+                            instruction.goto("$Function", function_name)
                 instruction_block.insert_instruction(instruction)
             instruction_block.describe()
 

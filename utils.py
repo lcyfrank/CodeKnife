@@ -8,9 +8,21 @@ def parse_int(_bytes):
 
 
 def parse_str(_bytes):
-    string = _bytes.decode('utf-8')
-    string = string.replace('\x00', '')
-    return string
+
+    try:
+        string = _bytes.decode('utf-8')
+        string = string.replace('\x00', '')
+        return string
+    except UnicodeDecodeError as e:
+        print(e)
+        string = _bytes.hex()
+        string_list = []
+        for i in range(int(len(string) / 2)):
+            string_list.append(string[i * 2: i * 2 + 2])
+        string = ""
+        for element in string_list:
+            string += ("\\x" + element)
+        return string
 
 
 def log_error(error):
