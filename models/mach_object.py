@@ -7,7 +7,13 @@ from models.objc_runtime import *
 from models.class_storage import *
 
 SELF_POINTER = -0x1000000
+RETURN_VALUE = -0x3000000
 
+return_code_with_type = {
+    'c': 'char', 'i': 'int', 's': 'short', 'l': 'long', 'q': 'long long', 'c': 'unsigned char',
+    'I': 'unsigned int', 'S': 'unsigned short', 'L': 'unsigned long', 'Q': 'unsigned long long',
+    'f': 'float', 'd': 'double', 'B': 'BOOL', 'v': 'void', '*': 'char *'
+}
 
 class MachContainer:
 
@@ -62,13 +68,22 @@ class MachObject:
 
         self.symbols = {}           # address: name
         self.ivar_refs = {}         # <> : index
+        # self.property_refs = {}
 
         self.dylibs = {}            # ref_address: name
         self.functions = {}         # impaddr: symbol_address
+        self.functions_type = []    # < function_data >
+        self.statics = {}
         self.ivars = {}             # ref_address: <ivar>
+        # self.properties = {}
 
+        # self.methods 中的方法均为开发人员实现的方法，包括类中的方法和分类中的方法
         self.methods = {}           # impaddr: (class, method)
+        self.methods_type = []      # < method_data >
         self.class_datas = {}       # data_address: < name, super_name, methods >
+        self.cat_datas = {}         # data_address: < name, class_name, methods >
+
+        self.cfstrings = {}
 
         self.parse_dylib_class()
 
@@ -79,8 +94,16 @@ class MachObject:
         self.parse_methtype()
 
         self.parse_functions64()
+        self.parse_static64()
         self.parse_class_methods_and_data()
-        self.parse_ivars()
+        self.parse_cat_methods_and_data()
+        self.parse_cfstring()
+
+        # print(self.ivar_refs)
+        # self.parse_ivars()
+
+        # print(self.statics)
+        # print(self.symbols)
 
         self.text = self.generate_text()
         text_section, _ = self._sections['text']
@@ -94,6 +117,8 @@ class MachObject:
             return self.functions[address_key]
         elif address_key in self.ivars:
             return self.ivars[address_key]
+        elif address_key in self.statics:
+            return self.statics[address_key]
         else:
             if hex(address - SELF_POINTER) in self.ivar_refs:
                 return self.ivar_refs[hex(address - SELF_POINTER)]
@@ -108,9 +133,33 @@ class MachObject:
         text_code = self.bytes[text_begin:text_begin + text.size]
         return text_code
 
+    # 方法的返回值
+    def get_return_type_from_method(self, _class, method):
+
+        for method_data in self.methods_type:
+            if method_data._class == _class and method_data.name == method:
+                return method_data.return_type
+        if _class == 'UIScreen' and method == 'mainScreen':
+            return 'UIScreen'
+        if method == 'view':
+            return 'UIView'
+        if method.startswith('alloc') or method.startswith('init'):
+            return _class
+        # if _class == 'UILabel' and method == 'alloc':
+        #     return 'UILabel'
+        return 'id'
+
+    # 函数的返回值
+    def get_return_type_from_function(self, name):
+        for function_data in self.functions_type:
+            if function_data.name == name:
+                return function_data.return_type
+        if name.startswith('_objc'):
+            return 'void'
+        return 'id'
+
     # 这个函数等会儿再改
-    def parse_ivars(self):
-        pass
+    # def parse_ivars(self):
         # _, symtab = self._cmds["symtab"][0]
         # _, ivar_index = self._sections["objc_ivar"]
         # symoff = symtab.symoff
@@ -137,6 +186,17 @@ class MachObject:
         #         self.ivar_list.append(ivar)
         #         self.ivar_refs[hex(ivar_ref)] = len(self.ivar_list) - 1
         #     count += 1
+
+    def parse_cfstring(self):
+        cfstring, _ = self._sections["cfstring"]
+        base_address = cfstring.addr
+
+        start = base_address if not self.is_64_bit else base_address - 0x100000000
+        end = start + cfstring.size
+        while start < end:
+            self.cfstrings[hex(base_address)] = hex(parse_int(self.bytes[start + 16: start + 24]))
+            base_address += 32
+            start += 32
 
     def parse_dylib_class(self):
         _, dyld_info = self._cmds["dyld_info"][0]
@@ -223,14 +283,155 @@ class MachObject:
                     base_address += 8 + skip
             pointer += 1
 
+    def parse_cat_methods_and_data(self):
+        '''
+        Generation:
+          > self.methods : {impaddr : (classname, methodname)}
+          > self.cat_datas : {cataddr : <cat>}
+        '''
+        objc_catlist, _ = self._sections["objc_catlist"]
+        catlist_addr = objc_catlist.addr if not self.is_64_bit else objc_catlist.addr - 0x100000000
+        total_size = objc_catlist.size
+        each_size = 8
+        count = 0
+        while count < int(total_size / each_size):  # 遍历 catlist 中所有类
+            catlist_begin = catlist_addr + count * each_size
+            cat_bytes = self.bytes[catlist_begin: catlist_begin + each_size]
+            oc_bytes_begin = (parse_int(cat_bytes) if not self.is_64_bit
+                              else parse_int(cat_bytes) - 0x100000000)
+            oc_bytes = self.bytes[oc_bytes_begin:oc_bytes_begin +
+                                  ObjcCategory.OC_TOTAL_SIZE]
+            objc_category = ObjcCategory.parse_from_bytes(oc_bytes)
+
+            category_name = self.symbols[hex(objc_category.name)]
+            cat_data = CatData(category_name)
+            if objc_category._class == 0:
+                class_name_index = self.dylibs[hex(parse_int(cat_bytes) + 8)]
+                class_name = self.symbols[hex(class_name_index)]
+                begin = class_name.find("$") + 2
+                class_name = class_name[begin:]
+                cat_data._class = class_name
+
+            # instance methods
+            oml_bytes_begin = (objc_category.instance_methods if not self.is_64_bit
+                               else objc_category.instance_methods - 0x100000000)
+            oml_bytes = self.bytes[oml_bytes_begin:
+                                   oml_bytes_begin + ObjcMethodList64.OML_TOTAL_SIZE]
+            objc_method_list = ObjcMethodList64.parse_from_bytes(oml_bytes)
+            for j in range(objc_method_list.method_count):
+                om_bytes_begin = (oml_bytes_begin + objc_method_list.get_size() + j *
+                                  ObjcMethod64.OM_TOTAL_SIZE)
+                om_bytes = self.bytes[om_bytes_begin:
+                                      om_bytes_begin + ObjcMethod64.OM_TOTAL_SIZE]
+                objc_method = ObjcMethod64.parse_from_bytes(om_bytes)
+                objc_method_implementation = objc_method.implementation
+                objc_method_name = self.symbols[hex(objc_method.name)]
+                objc_method_signature = self.symbols[hex(
+                    objc_method.signature)]
+                return_type, method_args = self.analysis_method_signature(objc_method_signature)
+                method_type = MethodData(cat_data._class, objc_method_name)
+                method_type.return_type = return_type
+                method_type.arguments_type = method_args
+                self.methods_type.append(method_type)
+                self.methods[hex(objc_method_implementation)] = (
+                    cat_data._class, objc_method_name)
+                cat_data.insert_instance_method(objc_method_name)
+
+            # class methods
+            oml_bytes_begin = (objc_category.class_methods if not self.is_64_bit
+                               else objc_category.class_methods - 0x100000000)
+            oml_bytes = self.bytes[oml_bytes_begin:
+                                   oml_bytes_begin + ObjcMethod64.OM_TOTAL_SIZE]
+            objc_method_list = ObjcMethodList64.parse_from_bytes(oml_bytes)
+            for j in range(objc_method_list.method_count):
+                om_bytes_begin = (oml_bytes_begin + objc_method_list.get_size() + j *
+                                  ObjcMethod64.OM_TOTAL_SIZE)
+                om_bytes = self.bytes[om_bytes_begin:
+                                      om_bytes_begin + ObjcMethod64.OM_TOTAL_SIZE]
+                objc_method = ObjcMethod64.parse_from_bytes(om_bytes)
+                objc_method_implementation = objc_method.implementation
+                objc_method_name = self.symbols[hex(objc_method.name)]
+                objc_method_signature = self.symbols[hex(objc_method.signature)]
+                return_type, method_args = self.analysis_method_signature(objc_method_signature)
+                method_type = MethodData(cat_data._class, objc_method_name)
+                method_type.return_type = return_type
+                method_type.arguments_type = method_args
+                self.methods_type.append(method_type)
+                # return_type = method_args = se
+                self.methods[hex(objc_method_implementation)] = (
+                    cat_data._class, objc_method_name)
+                cat_data.insert_class_method(objc_method_name)
+
+            # properties
+            opl_bytes_begin = (objc_category.instance_properties if not self.is_64_bit
+                               else objc_category.instance_properties - 0x100000000)
+            opl_bytes = self.bytes[opl_bytes_begin:opl_bytes_begin +
+                                   ObjcPropertyList.OPL_TOTAL_SIZE]
+            objc_property_list = ObjcPropertyList.parse_from_bytes(opl_bytes)
+            for j in range(objc_property_list.count):
+                op_bytes_begin = (opl_bytes_begin + objc_property_list.get_size() +
+                                  j * ObjcProperty.OP_TOTAL_SIZE)
+                op_bytes = self.bytes[op_bytes_begin: op_bytes_begin +
+                                      ObjcProperty.OP_TOTAL_SIZE]
+                objc_property = ObjcProperty.parse_from_bytes(op_bytes)
+                property_name = self.symbols[hex(objc_property.name)]
+                property_attributes = self.symbols[(
+                    hex(objc_property.attributes))]
+                if "@" in property_attributes:
+                    property_attributes_begin = property_attributes.find(
+                        "@\"") + 2
+                    property_attributes_end = property_attributes.find(
+                        "\"", property_attributes_begin)
+                    property_attributes = property_attributes[
+                        property_attributes_begin:property_attributes_end]
+                else:
+                    property_attributes = ""
+                _property = PropertyData(property_name, property_attributes)
+                cat_data.insert_property(_property)
+                # property_key = hex(op_bytes_begin + 0x100000000 if self.is_64_bit else op_bytes_begin)
+                # self.properties[hex(property_key)] = _property
+                # self.property_refs[]
+            self.cat_datas[hex(parse_int(cat_bytes))] = cat_data
+            count += 1
+
+    def analysis_method_signature(self, signature):
+        return_type = 'id'
+        arguments_type = []
+        return_code = signature[0]
+        if return_code == '@':  # object
+            return_type = 'id'
+        elif return_code == '#':  # Class
+            return_type = 'Class'
+        elif return_code == ':':  # SEL
+            return_type = 'SEL'
+        elif return_code == '[':  # c-type array
+            return_type = 'array'
+        elif return_code == '{':  # c-type structure
+            return_type = 'structure'
+        elif return_code == '(':  # c-type union
+            return_type = 'union'
+        elif return_code in return_code_with_type:
+            return_type = return_code_with_type[return_code]
+        else:
+            return_type = '?'
+        return (return_type, arguments_type)
+
     def parse_class_methods_and_data(self):
+        # TO-DO: 添加 class_data 中的 properties
+        '''
+        Generation:
+          > self.methods : {impaddr : (classname, methodname)}
+          > self.ivar_refs : {<> : index}
+          > self.ivars : {refindex : <ivar>}
+          > self.class_datas : {classaddr : <class>}
+        '''
         objc_classlist, _ = self._sections["objc_classlist"]
         classlist_addr = (
             objc_classlist.addr if not self.is_64_bit else objc_classlist.addr - 0x100000000)
         total_size = objc_classlist.size
         each_size = 8
         count = 0
-        while count < int(total_size / each_size):
+        while count < int(total_size / each_size):  # 遍历 classlist 中的所有类
             classlist_begin = classlist_addr + count * each_size
             class_bytes = self.bytes[classlist_begin:classlist_begin + each_size]
             oc_bytes_begin = (parse_int(class_bytes) if not self.is_64_bit
@@ -261,33 +462,50 @@ class MachObject:
                 objc_method = ObjcMethod64.parse_from_bytes(om_bytes)
                 objc_method_implementation = objc_method.implementation
                 objc_method_name = self.symbols[hex(objc_method.name)]
+                objc_method_signature = self.symbols[hex(objc_method.signature)]
+                return_type, method_args = self.analysis_method_signature(objc_method_signature)
+                method_type = MethodData(class_name, objc_method_name)
+                method_type.return_type = return_type
+                method_type.arguments_type = method_args
+                self.methods_type.append(method_type)
                 self.methods[hex(objc_method_implementation)] = (
                     class_name, objc_method_name)
                 class_data.insert_method(objc_method_name)
 
             if objc_data.ivar != 0:
                 oil_bytes_begin = (objc_data.ivar if not self.is_64_bit
-                                else objc_data.ivar - 0x100000000)
-                oil_bytes = self.bytes[oil_bytes_begin:oil_bytes_begin + ObjcIvars64.OI_TOTAL_SIZE]
+                                   else objc_data.ivar - 0x100000000)
+                oil_bytes = self.bytes[oil_bytes_begin:oil_bytes_begin +
+                                       ObjcIvars64.OI_TOTAL_SIZE]
                 objc_ivars = ObjcIvars64.parse_from_bytes(oil_bytes)
                 for j in range(objc_ivars.count):
-                    oi_bytes_begin = oil_bytes_begin + objc_ivars.get_size() + j * ObjcIvar64.OI_TOTAL_SIZE
-                    oi_bytes = self.bytes[oi_bytes_begin:oi_bytes_begin + ObjcIvar64.OI_TOTAL_SIZE]
+                    oi_bytes_begin = oil_bytes_begin + objc_ivars.get_size() + j * \
+                        ObjcIvar64.OI_TOTAL_SIZE
+                    oi_bytes = self.bytes[oi_bytes_begin:oi_bytes_begin +
+                                          ObjcIvar64.OI_TOTAL_SIZE]
                     objc_ivar = ObjcIvar64.parse_from_bytes(oi_bytes)
                     objc_ivar_name = self.symbols[hex(objc_ivar.name)]
 
                     objc_ivar_type = self.symbols[hex(objc_ivar.type)]
-                    objc_ivar_type_begin = objc_ivar_type.find("@\"") + 2
-                    objc_ivar_type_end = objc_ivar_type.find("\"", objc_ivar_type_begin)
-                    objc_ivar_type = objc_ivar_type[objc_ivar_type_begin:objc_ivar_type_end]
+                    if "@" in objc_ivar_type:
+                        objc_ivar_type_begin = objc_ivar_type.find("@\"") + 2
+                        objc_ivar_type_end = objc_ivar_type.find(
+                            "\"", objc_ivar_type_begin)
+                        objc_ivar_type = objc_ivar_type[objc_ivar_type_begin:objc_ivar_type_end]
+                    else:
+                        objc_ivar_type = ""
                     ivar = IvarData(objc_ivar_name, objc_ivar_type)
                     class_data.insert_ivar(ivar)
 
                     ivar_offset_pointer = objc_ivar.offset_pointer
                     ivar_offset_begin = ivar_offset_pointer if not self.is_64_bit else ivar_offset_pointer - 0x100000000
-                    ivar_offset = parse_int(self.bytes[ivar_offset_begin:ivar_offset_begin + 8])
+                    # print('ivar_offset_begin: ' + hex(ivar_offset_begin))
+                    ivar_offset = parse_int(
+                        self.bytes[ivar_offset_begin:ivar_offset_begin + 8])
                     self.ivars[hex(ivar_offset_pointer)] = ivar_offset
-                    self.ivar_refs[hex(ivar_offset)] = len(class_data.ivars) - 1
+                    # print('ivar_offset: ' + hex(ivar_offset))
+                    self.ivar_refs[hex(ivar_offset)] = len(
+                        class_data.ivars) - 1
 
             super_class_addr = (objc_class.superclass if not self.is_64_bit
                                 else objc_class.superclass - 0x100000000)
@@ -367,6 +585,26 @@ class MachObject:
             self.symbols[method_name_key] = parse_str(name_bytes)
             base_addr += (name_end - name_begin + 1)
             begin_pointer = name_end + 1
+
+    def parse_static64(self):
+        _, symtab = self._cmds["symtab"][0]
+        symoff = symtab.symoff
+        sym_num = symtab.nsyms
+        count = 0
+        _, bss_index = self._sections["bss"]
+
+        nlist_size = Nlist64.N_TOTAL_SIZE
+        while count < sym_num:
+            nlist_begin = symoff + count * nlist_size
+            nlist_bytes = self.bytes[nlist_begin:nlist_begin + nlist_size]
+            nlist = Nlist64.parse_from_bytes(nlist_bytes)
+            if nlist.n_sect == bss_index:
+                key = hex(nlist.n_value)
+                symbol_addr = symtab.stroff + nlist.n_strx
+                if self.is_64_bit:
+                    symbol_addr += 0x100000000
+                self.statics[key] = (symbol_addr)
+            count += 1
 
     def parse_functions64(self):
         _, dysymtab = self._cmds["dysymtab"][0]

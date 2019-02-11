@@ -44,6 +44,39 @@ class ObjcClass64(ObjcBase):
         return ObjcClass64.OC_TOTAL_SIZE
 
 
+class ObjcCategory(ObjcBase):
+
+    OC_TOTAL_SIZE = 48
+    OC_NAME_RANGE = (0, 8)
+    OC_CLASS_RANGE = (8, 8)
+    OC_INSTANCE_METHODS_RANGE = (16, 8)
+    OC_CLASS_METHODS_RANGE = (24, 8)
+    OC_PROTOCOLS_RANGE = (32, 8)
+    OC_INSTANCE_PROPERTIES_RANGE = (40, 8)
+
+    def __init__(self):
+        self.name = 0
+        self._class = 0
+        self.instance_methods = 0
+        self.class_methods = 0
+        self.protocols = 0
+        self.instance_properties = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        oc = cls()
+        oc.name = parse_int(_bytes[0:8])
+        oc._class = parse_int(_bytes[8:16])
+        oc.instance_methods = parse_int(_bytes[16:24])
+        oc.class_methods = parse_int(_bytes[24:32])
+        oc.protocols = parse_int(_bytes[32:40])
+        oc.instance_properties = parse_int(_bytes[40:48])
+        return oc
+    
+    def get_size(self):
+        return ObjcCategory.OC_TOTAL_SIZE
+
+
 class ObjcData64(ObjcBase):
 
     OD_TOTAL_SIZE = 72
@@ -135,6 +168,48 @@ class ObjcMethod64(ObjcBase):
 
     def get_size(self):
         return ObjcMethod64.OM_TOTAL_SIZE
+
+
+class ObjcPropertyList(ObjcBase):
+
+    OPL_TOTAL_SIZE = 8
+    OPL_UNKNOWN_RANGE = (0, 4)
+    OPL_COUNT_RANGE = (4, 4)
+
+    def __init__(self):
+        self.unknown = 0
+        self.count = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        opl = cls()
+        opl.unknown = parse_int(_bytes[0:4])
+        opl.count = parse_int(_bytes[4:8])
+        return opl
+
+    def get_size(self):
+        return ObjcPropertyList.OPL_TOTAL_SIZE
+
+
+class ObjcProperty(ObjcBase):
+
+    OP_TOTAL_SIZE = 16
+    OP_NAME_RANGE = (0, 8)
+    OP_ATTRIBUTES_RANGE = (8, 8)
+
+    def __init__(self):
+        self.name = 0
+        self.attributes = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        op = cls()
+        op.name = parse_int(_bytes[0:8])
+        op.attributes = parse_int(_bytes[8:16])
+        return op
+
+    def get_size(self):
+        return ObjcProperty.OP_TOTAL_SIZE
 
 
 class ObjcIvars64(ObjcBase):

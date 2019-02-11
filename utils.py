@@ -14,7 +14,7 @@ def parse_str(_bytes):
         string = string.replace('\x00', '')
         return string
     except UnicodeDecodeError as e:
-        print(e)
+        # print(e)
         string = _bytes.hex()
         string_list = []
         for i in range(int(len(string) / 2)):

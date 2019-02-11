@@ -50,7 +50,7 @@ class FloatRegister:
 
 class Interpreter:
 
-    def __init__(self, memory_provider=None):
+    def __init__(self, memory_provider=None, handle_strange_add=None):
         self.gen_regs = [Register(i) for i in range(31)]
         self.float_regs = [FloatRegister(i) for i in range(32)]
         self.gen_regs[0].value = SELF_POINTER
@@ -61,6 +61,14 @@ class Interpreter:
         self.pc = Register(-1)
         self.memory = {hex(0-0x30):SUPER_POINTER}
         self.memory_provider = memory_provider
+        self.handle_strange_add = handle_strange_add
+
+    def modify_regs(self, reg, value):
+        if not type(value) == int:
+            return False
+        if reg.isdigit():
+            reg_index = int(reg)
+            self.gen_regs[reg_index].value = value
 
     def current_state(self):
         for i in range(len(self.gen_regs)):
@@ -126,7 +134,11 @@ class Interpreter:
                   insn.id == ARM64_INS_SMOV or
                   insn.id == ARM64_INS_UMOV):
                 self.handle_move(insn)
-
+            elif (insn.id == ARM64_INS_ORR or
+                  insn.id == ARM64_INS_ORN):
+                self.handle_orr(insn)
+            elif insn.id == ARM64_INS_AND:
+                self.handle_and(insn)
             i += 1
 
     def get_register(self, name):
@@ -153,6 +165,38 @@ class Interpreter:
             reg_index = int(name[1:])
             return self.float_regs[reg_index]
         print(name)
+
+    def handle_orr(self, insn):
+        result = 0
+        for j in range(1, len(insn.operands)):
+            operand = insn.operands[j]
+            if operand.type == ARM64_OP_REG:
+                reg_name = insn.reg_name(operand.reg)
+                register = self.get_register(reg_name)
+                result |= register.value
+            elif operand.type == ARM64_OP_IMM:
+                result |= operand.imm
+        dest = insn.operands[0]
+        if dest.type == ARM64_OP_REG:
+            reg_name = insn.reg_name(dest.reg)
+            register = self.get_register(reg_name)
+            register.value = result
+
+    def handle_and(self, insn):
+        result = 0
+        for j in range(1, len(insn.operands)):
+            operand = insn.operands[j]
+            if operand.type == ARM64_OP_REG:
+                reg_name = insn.reg_name(operand.reg)
+                register = self.get_register(reg_name)
+                result &= register.value
+            elif operand.type == ARM64_OP_IMM:
+                result &= operand.imm
+        dest = insn.operands[0]
+        if dest.type == ARM64_OP_REG:
+            reg_name = insn.reg_name(dest.reg)
+            register = self.get_register(reg_name)
+            register.value = result
 
     def handle_move(self, insn):
         dest_register_name = insn.reg_name(insn.operands[0].reg)
@@ -212,6 +256,21 @@ class Interpreter:
         self.handle_store_register(insn)
 
     def handle_add(self, insn):
+        if insn.operands[1].type == ARM64_OP_REG and insn.operands[2].type == ARM64_OP_REG:
+            reg_name = insn.reg_name(insn.operands[1].reg)
+            register = self.get_register(reg_name)
+            if register.value < 0:
+                reg_name_2 = insn.reg_name(insn.operands[2].reg)
+                register_2 = self.get_register(reg_name_2)
+                dest = insn.operands[0]
+                if dest.type == ARM64_OP_REG:
+                    reg_name = insn.reg_name(dest.reg)
+                    register = self.get_register(reg_name)
+                    register.value = register_2.value
+                if self.handle_strange_add:
+                    self.handle_strange_add(register_2.value)
+                return
+
         result = 0
         for j in range(1, len(insn.operands)):
             operand = insn.operands[j]

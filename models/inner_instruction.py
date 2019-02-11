@@ -14,6 +14,11 @@ class MethodStorage:
                 return _method_insn
         return None
 
+    @classmethod
+    def list_all(cls):
+        for _method_insn in cls._method_instructions:
+            print(_method_insn.class_name + ": " + _method_insn.method_name)
+
 
 class MethodInstructions:
 

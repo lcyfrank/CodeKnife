@@ -4,3 +4,4 @@ Test.*
 Target
 __pycache__
 .vscode
+.idea
