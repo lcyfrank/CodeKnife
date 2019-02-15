@@ -1,6 +1,8 @@
 import ctypes
 # Inner Function
-def parse_int(_bytes):
+def parse_int(_bytes, little_end=True):
+    if not little_end:
+        return int(_bytes.hex(), 16)
     temp_bytes = b''
     for i in range(len(_bytes)):
         temp_bytes = _bytes[i: i + 1] + temp_bytes

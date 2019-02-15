@@ -29,9 +29,10 @@ class FatHeader(FatBase):
 
     @classmethod
     def parse_from_bytes(cls, _bytes):
+        print(_bytes)
         fh = cls()
         fh.magic = parse_int(_bytes[0:4])
-        fh.nfat_arch = parse_int(_bytes[4:8])
+        fh.nfat_arch = parse_int(_bytes[4:8], False)
         return fh
 
     def get_size(self):
@@ -57,11 +58,12 @@ class FatArch(FatBase):
     @classmethod
     def parse_from_bytes(cls, _bytes):
         fa = cls()
-        fa.cputype = parse_int(_bytes[0:4])
-        fa.cpusubtype = parse_int(_bytes[4:8])
-        fa.offset = parse_int(_bytes[8:12])
-        fa.size = parse_int(_bytes[12:16])
-        fa.size = parse_int(_bytes[16:20])
+        # 这里是大端，其他地方是小端......
+        fa.cputype = parse_int(_bytes[0:4], False)
+        fa.cpusubtype = parse_int(_bytes[4:8], False)
+        fa.offset = parse_int(_bytes[8:12], False)
+        fa.size = parse_int(_bytes[12:16], False)
+        fa.align = parse_int(_bytes[16:20], False)
         return fa
 
     def get_size(self):

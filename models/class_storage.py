@@ -46,10 +46,15 @@ class FunctionData():
         self.arguments_type = []  # empty means no argument
 
 
+MethodDataTypeClass = 0
+MethodDataTypeInstance = 1
+
+
 class MethodData:
 
-    def __init__(self, _class, name):
+    def __init__(self, _class, name, type=MethodDataTypeInstance):
         self._class = _class
+        self.type = type
         self.name = name
         self.return_type = 'id'   # guess default return_type should be 'id'
         self.arguments_type = []  # empty means no argument

@@ -59,9 +59,14 @@ class Interpreter:
         self.wsp = Register(-1)
         self.sp = Register(-1)
         self.pc = Register(-1)
-        self.memory = {hex(0-0x30):SUPER_POINTER}
+        self.memory = {hex(0-0x30): SUPER_POINTER}
         self.memory_provider = memory_provider
         self.handle_strange_add = handle_strange_add
+
+        # Jump related
+        self.compare_flag = 0  # 0 is equal and -1 is small and 1 is bigger
+        self.should_jump = False
+        self.jump_address = 0x0
 
     def modify_regs(self, reg, value):
         if not type(value) == int:

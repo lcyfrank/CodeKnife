@@ -35,7 +35,6 @@ BIND_OPCODE_DO_BIND_ADD_ADDR_IMM_SCALED = 0xB0
 BIND_OPCODE_DO_BIND_ULEB_TIMES_SKIPPING_ULEB = 0xC0
 
 
-
 class MachBase:
 
     def __init__(self):
@@ -126,6 +125,9 @@ class LoadCommand(MachBase):
     LC_DYLD_INFO = 0x22
     LC_DYLD_INFO_ONLY = (0x22 | LC_REQ_DYLD)
 
+    LC_LOAD_WEAK_DYLIB = (0x18 | LC_REQ_DYLD)
+    LC_RPATH = (0x1c | LC_REQ_DYLD)
+
     def __init__(self):
         self.cmd = 0
         self.cmdsize = 0
@@ -141,11 +143,29 @@ class LoadCommand(MachBase):
         return LoadCommand.LC_TOTAL_SIZE
 
 
+class RpathCommand(LoadCommand):
+    RC_TOTAL_SIZE = 16
+    RC_PATH_RANGE = (8, 8)
+
+    def __init__(self):
+        super(RpathCommand, self).__init__()
+        self.path = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        rc = cls()
+        rc.cmd = parse_int(_bytes[0:4])
+        rc.cmdsize = parse_int(_bytes[4:8])
+        rc.path = parse_int(_bytes[8:16])
+        return rc
+
+    def get_size(self):
+        return RpathCommand.RC_TOTAL_SIZE
+
+
 class DyldInfoCommand(LoadCommand):
 
     DIC_TOTAL_SIZE = 48
-    DIC_CMD_RANGE = (0, 4)
-    DIC_CMDSIZE_RANGE = (4, 4)
     DIC_REBASE_OFF_RANGE = (8, 4)
     DIC_REBASE_SIZE_RANGE = (12, 4)
     DIC_BIND_OFF_RANGE = (16, 4)
