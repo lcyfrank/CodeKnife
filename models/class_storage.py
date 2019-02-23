@@ -46,6 +46,18 @@ class FunctionData():
         self.arguments_type = []  # empty means no argument
 
 
+BlockMethodTypeStack = 0
+BlockMethodTypeGlobal = 1
+BlockMethodTypeMalloc = 2
+
+
+class BlockMethodData:
+
+    def __init__(self, type=BlockMethodTypeStack):
+        self.type = type
+        self.invoke = 0
+
+
 MethodDataTypeClass = 0
 MethodDataTypeInstance = 1
 

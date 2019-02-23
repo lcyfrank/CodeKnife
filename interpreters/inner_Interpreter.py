@@ -4,7 +4,8 @@ from capstone import *
 from capstone.arm64 import *
 
 SELF_POINTER = -0x1000000
-SUPER_POINTER = -0x2000000
+CURRENT_SELECTOR = -0x2000000
+
 
 class Register:
 
@@ -50,18 +51,29 @@ class FloatRegister:
 
 class Interpreter:
 
-    def __init__(self, memory_provider=None, handle_strange_add=None):
+    def __init__(self, memory_provider=None, handle_strange_add=None, parameters=[]):
         self.gen_regs = [Register(i) for i in range(31)]
         self.float_regs = [FloatRegister(i) for i in range(32)]
-        self.gen_regs[0].value = SELF_POINTER
+
         self.wzr = Register(-1)
         self.xzr = Register(-1)
         self.wsp = Register(-1)
         self.sp = Register(-1)
         self.pc = Register(-1)
-        self.memory = {hex(0-0x30): SUPER_POINTER}
+        self.memory = {}
+        # self.memory = {hex(0-0x30): SUPER_POINTER}  # 父指针好像在
         self.memory_provider = memory_provider
         self.handle_strange_add = handle_strange_add
+
+        if len(parameters) <= 4:
+            for i in range(len(parameters)):
+                self.gen_regs[i].value = parameters[i]
+        else:
+            for i in range(4):
+                self.gen_regs[i].value = parameters[i]
+            # 超过 4 个参数再说
+            # for i in range(len(parameters) - 4):
+                # self.memory[hex()]
 
         # Jump related
         self.compare_flag = 0  # 0 is equal and -1 is small and 1 is bigger
@@ -94,7 +106,7 @@ class Interpreter:
         self.wsp.clear()
         self.sp.clear()
         self.pc.clear()
-        self.memory = {hex(0-0x30):SUPER_POINTER}
+        # self.memory = {hex(0-0x30):SUPER_POINTER}
 
     def interpret_code(self, codes, begin=0, end=-1):
         i = begin
@@ -264,7 +276,7 @@ class Interpreter:
         if insn.operands[1].type == ARM64_OP_REG and insn.operands[2].type == ARM64_OP_REG:
             reg_name = insn.reg_name(insn.operands[1].reg)
             register = self.get_register(reg_name)
-            if register.value < 0:
+            if register.value < 0:  # 在取 ivar 的时候，会遇到这种问题，因为现在对于 SELF 指针的定义为一个负数的常量
                 reg_name_2 = insn.reg_name(insn.operands[2].reg)
                 register_2 = self.get_register(reg_name_2)
                 dest = insn.operands[0]

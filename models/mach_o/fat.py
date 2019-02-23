@@ -29,7 +29,6 @@ class FatHeader(FatBase):
 
     @classmethod
     def parse_from_bytes(cls, _bytes):
-        print(_bytes)
         fh = cls()
         fh.magic = parse_int(_bytes[0:4])
         fh.nfat_arch = parse_int(_bytes[4:8], False)

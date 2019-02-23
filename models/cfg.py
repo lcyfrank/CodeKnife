@@ -1,41 +1,125 @@
+from graphviz import Digraph, Graph
+
 CFGNodeTypeFunction = 0
 CFGNodeTypeMethod = 1
 
 
 class CFG:
 
-    def __init__(self, name=''):
+    def __init__(self, name='', entry=None):
         self.name = name
-        self.nodes = []
-        self.data_flows = []
+        self.entry = entry
+        self.outs = []
+        self.all_blocks = []
+
+    def add_block(self, block):
+        self.all_blocks.append(block)
+        if block.out:
+            self.outs.append(block)
+
+    def get_block(self, name):
+        for block in self.all_blocks:
+            if block.name == name:
+                return block
+        return None
+    # if the data flow between the no.0 node and no.1 node
+    # the index should be 0
+    # def modify_data_flow(self, index, data_flow):
+    #     node_count = len(self.nodes)
+    #     if node_count - 1 > index:
+    #         if index < len(self.data_flows):
+    #             self.data_flows[index] = data_flow
+    #         else:
+    #             for i in range(index):
+    #                 self.data_flows.append(None)
+    #             self.data_flows.append(data_flow)
+    #     else:
+            # print('Data flow index error!')
+
+    def describe(self):
+        for block in self.all_blocks:
+            block.describe()
+
+    def graphviz_obj(self):
+
+        cfg_view = Digraph(self.name)
+        for block in self.all_blocks:
+            for node in block.nodes:
+                if type(node) == CFGNode:
+                    node_name = block.name + str(block.nodes.index(node))
+                    node_label = node.describe(False)
+                    cfg_view.node(node_name, node_label)
+                elif type(node) == CFG:
+                    pass
+
+        return cfg_view
+
+        # block_nodes = {}
+        # cfg_view = Digraph(self.name)
+        # # cfg_view.node('entry', 'entry')
+        #
+        # for block in self.all_blocks:
+        #     block_view = Digraph('cluster' + block.name)
+        #     if len(block.nodes) == 0:
+        #         node_name = 'node' + block.name
+        #         block_view.node(node_name, '', shape='plaintext')
+        #         block_nodes[block.name] = (node_name, node_name)
+        #     else:
+        #         start_name = None
+        #         end_name = None
+        #         before_name = None
+        #         for node in block.nodes:
+        #             if type(node) == CFG:
+        #                 pass
+        #                 # recursive_cfg = node.graphviz_obj()
+        #                 # block_view.subgraph(recursive_cfg)
+        #
+        #             elif type(node) == CFGNode:
+        #                 node_name = block.name + str(block.nodes.index(node))
+        #                 node_label = node.describe(False)
+        #                 block_view.node(node_name, node_label, shape='box')
+        #                 if before_name is not None:
+        #                     block_view.edge(before_name, node_name)
+        #                 before_name = node_name
+        #                 if start_name is None:
+        #                     start_name = node_name
+        #                 if block == self.all_blocks[-1]:
+        #                     end_name = end_name
+        #         block_nodes[block.name] = (start_name, end_name)
+        #
+        #     cfg_view.subgraph(block_view)
+        #
+        # # cfg_view.edge('entry', 'cluster' + self.entry.name)
+        #
+        # for block in self.all_blocks:
+        #     _, first_name = block_nodes[block.name]
+        #     for follow in block.follow_blocks:
+        #         second_name, _ = block_nodes[follow]
+        #         cfg_view.edge(first_name, second_name)
+        # return cfg_view
+
+    def view(self):
+        self.graphviz_obj().view()
+
+class CFGBlock:
+
+    def __init__(self, name):
+        self.name = name
+        self.out = False  # if this block contains `ret` instruction
+        self.nodes = []  # node 包括 node 或者 cfg
+        self.follow_blocks = []  # the blocks follow this block (name)
 
     def add_node(self, node):
         self.nodes.append(node)
 
-    # if the data flow between the no.0 node and no.1 node
-    # the index should be 0
-    def modify_data_flow(self, index, data_flow):
-        node_count = len(self.nodes)
-        if node_count - 1 > index:
-            if index < len(self.data_flows):
-                self.data_flows[index] = data_flow
-            else:
-                for i in range(index):
-                    self.data_flows.append(None)
-                self.data_flows.append(data_flow)
-        else:
-            print('Data flow index error!')
+    def goto_block(self, block):
+        self.follow_blocks.append(block)
 
     def describe(self):
-        for i in range(1, len(self.nodes) - 1):
+        for i in range(len(self.nodes) - 1):
             self.nodes[i].describe()
-            if (i - 1 < len(self.data_flows) and
-                self.data_flows[i - 1] is not None and
-                not self.data_flows[i - 1].isEmpty):
-                self.data_flows[i - 1].describe()
-            else:
-                print('||')
-                print('\/')
+            print('||')
+            print('\/')
         if len(self.nodes) > 0:
             self.nodes[-1].describe()
 
@@ -54,11 +138,14 @@ class CFGNode:
         else:
             return self.class_name, self.method_name
 
-    def describe(self):
+    def describe(self, verbose=True):
         if self.type == CFGNodeTypeFunction:
             print('<%s>' % self.function_name)
+            describe = '<' + self.function_name + '>'
         else:
             print('<%s: %s>' % (self.class_name, self.method_name))
+            describe = '<' + self.class_name + ': ' + self.method_name + '>'
+        return describe
 
 
 class CFGDataFlow:

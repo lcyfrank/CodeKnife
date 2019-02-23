@@ -507,3 +507,63 @@ class ObjcIvar64(ObjcBase):
 
     def get_size(self):
         return ObjcIvar64.OI_TOTAL_SIZE
+
+
+class ObjcBlock(ObjcBase):
+
+    OB_TOTAL_SIZE = 20
+    OB_ISA_RANGE = (0, 4)
+    OB_FLAGS_RANGE = (4, 4)
+    OB_RESERVED_RANGE = (8, 4)
+    OB_INVOKE_RANGE = (12, 4)
+    OB_DESCRIPTOR_RANGE = (16, 4)
+
+    def __init__(self):
+        self.isa = 0
+        self.flags = 0
+        self.reserved = 0
+        self.invoke = 0
+        self.descriptor = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        ob = cls()
+        ob.isa = parse_int(_bytes[0:4])
+        ob.flags = parse_int(_bytes[4:8])
+        ob.reserved = parse_int(_bytes[8:12])
+        ob.invoke = parse_int(_bytes[12:16])
+        ob.descriptor = parse_int(_bytes[16:20])
+        return ob
+
+    def get_size(self):
+        return ObjcBlock.OB_TOTAL_SIZE
+
+
+class ObjcBlock64(ObjcBase):
+
+    OB_TOTAL_SIZE = 32
+    OB_ISA_RANGE = (0, 8)
+    OB_FLAGS_RANGE = (8, 4)
+    OB_RESERVED_RANGE = (12, 4)
+    OB_INVOKE_RANGE = (16, 8)
+    OB_DESCRIPTOR_RANGE = (24, 8)
+
+    def __init__(self):
+        self.isa = 0
+        self.flags = 0
+        self.reserved = 0
+        self.invoke = 0
+        self.descriptor = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        ob = cls()
+        ob.isa = parse_int(_bytes[0:8])
+        ob.flags = parse_int(_bytes[8:12])
+        ob.reserved = parse_int(_bytes[12:16])
+        ob.invoke = parse_int(_bytes[16:24])
+        ob.descriptor = parse_int(_bytes[24:32])
+        return ob
+
+    def get_size(self):
+        return ObjcBlock64.OB_TOTAL_SIZE

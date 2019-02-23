@@ -7,6 +7,7 @@ from models.objc_runtime import *
 from models.class_storage import *
 
 SELF_POINTER = -0x1000000
+CURRENT_SELECTOR = -0x2000000
 RETURN_VALUE = -0x3000000
 
 return_code_with_type = {
@@ -27,7 +28,7 @@ class MachContainer:
             header = self.aple_header()
 
             self.nfat_arch = header.nfat_arch
-            for i in range(0, self.nfat_arch):
+            for i in range(1, self.nfat_arch):  # 现在只调试 64-bit 的 Mach-O 信息
                 arch = self.aple_arch(i)
                 mach_bytes = self.bytes[arch.offset:arch.offset + arch.size]
                 mach_object = MachObject(mach_bytes, arch.offset)
@@ -80,15 +81,20 @@ class MachObject:
         # self.properties = {}
 
         # self.methods 中的方法均为开发人员实现的方法，包括类中的方法和分类中的方法
-        self.methods = {}           # impaddr: (class, method)
+        self.methods = {}           # impaddr: (class, method)  / impaddr: (block, block)
         self.methods_type = []      # < method_data >
         self.class_datas = {}       # data_address: < name, super_name, methods >
         self.cat_datas = {}         # data_address: < name, class_name, methods >
+
+        # 解析 Block
+        self.block_methods = {}     # data_address: <block_method data>
 
         self.cfstrings = {}
 
         self.parse_dylib_class()
         # print(self.dylibs['0x10207e840'])
+        for key in self.dylibs:
+            print(key, self.symbols[hex(self.dylibs[key])])
 
         self.parse_symtab()       # 修改成兼容 32-bit 和 64-bit
         self.parse_methname()
@@ -96,7 +102,9 @@ class MachObject:
         self.parse_cstring()
         self.parse_methtype()
 
-        # 兼容 32-bit 和 64-bit
+        self.parse_block()  # 解析 Block 需要依赖  dylib
+
+        #  兼容 32-bit 和 64-bit
         if self.is_64_bit:
             self.parse_functions64()
         else:
@@ -205,6 +213,30 @@ class MachObject:
         #         self.ivar_list.append(ivar)
         #         self.ivar_refs[hex(ivar_ref)] = len(self.ivar_list) - 1
         #     count += 1
+
+    def parse_block(self):
+
+        block_class_names = ['__NSConcreteStackBlock', '__NSConcreteGlobalBlock', '__NSConcreteMallocBlock']
+        for dylib_addr in self.dylibs:
+            dylib_name = self.symbols[hex(self.dylibs[dylib_addr])]
+            if dylib_name in block_class_names:
+                type = block_class_names.index(dylib_name)
+                block_address = int(dylib_addr, 16)
+                block_address_start = block_address - (self.offset if not self.is_64_bit else 0x100000000)
+                block_address_end = block_address_start + (ObjcBlock.OB_TOTAL_SIZE if not self.is_64_bit else
+                                                           ObjcBlock64.OB_TOTAL_SIZE)
+                block_bytes = self.bytes[block_address_start:block_address_end]
+                if self.is_64_bit:
+                    ob = ObjcBlock64.parse_from_bytes(block_bytes)
+                else:
+                    ob = ObjcBlock.parse_from_bytes(block_bytes)
+
+                block_data = BlockMethodData(type)
+                block_data.invoke = ob.invoke
+
+                self.block_methods[dylib_addr] = block_data
+                self.methods[hex(block_data.invoke)] = '$Block', dylib_addr
+                print(self.methods[hex(block_data.invoke)])
 
     def parse_cfstring(self):
         cfstring, _ = self._sections["cfstring"]
@@ -444,8 +476,6 @@ class MachObject:
                     else:
                         objc_property = ObjcProperty.parse_from_bytes(op_bytes)
 
-                    print(hex(objc_property.name))
-                    print(hex(objc_property.attributes))
                     property_name = self.symbols[hex(objc_property.name)]
                     # print(class_name)
                     # print(property_name)
