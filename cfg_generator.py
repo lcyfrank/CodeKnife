@@ -14,7 +14,9 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
             cfg_block = CFGBlock(hex(instruction.address))
             if len(wait_for_follow) > 0:
                 for fol_block in wait_for_follow:
+                    # print(fol_block.name, end=' ')
                     fol_block.goto_block(cfg_block.name)
+                # print('')
                 wait_for_follow = []
 
         if instruction.goto_insns:  # 如果有调用函数
@@ -54,11 +56,13 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
                         cfg_blocks.append(cfg_block)
 
                         for rec_block in recursive_cfg.all_blocks:
+                            print(rec_block.name, end=' ')
+
                             cfg_blocks.append(rec_block)
                             if rec_block.out:
                                 rec_block.out = False
                                 wait_for_follow.append(rec_block)
-
+                        print('')
                         cfg_block = None
                         continue
                 cfg_node = CFGNode(CFGNodeTypeMethod)
@@ -100,12 +104,14 @@ def generate_cfg(method, info_provider, recursive=False):
         if not block.is_return:  # 含有 ret 的基本块应该肯定不会有 followed 的块
             if block.jump_to_block is not None and block.jump_to_block in method.all_blocks:
                 cfg_blocks[-1].goto_block(block.jump_to_block)
-                if cfg.get_block(block.jump_to_block) is None:
+                if (cfg.get_block(block.jump_to_block) is None and
+                    method.all_blocks[block.jump_to_block] not in wait_blocks_queue):
                     wait_blocks_queue.append(method.all_blocks[block.jump_to_block])
 
             if block.jump_condition and block.next_block is not None:
                 cfg_blocks[-1].goto_block(block.next_block)
-                if cfg.get_block(block.next_block) is None:
+                if (cfg.get_block(block.next_block) is None and
+                    method.all_blocks[block.next_block] not in wait_blocks_queue):
                     wait_blocks_queue.append(method.all_blocks[block.next_block])
     return cfg
 

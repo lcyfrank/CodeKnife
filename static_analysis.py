@@ -424,6 +424,8 @@ def _analyse_method(method, mach_info):
             if method_instructions.entry_block is None:
                 method_instructions.entry_block = block
 
+    print(method_instructions.all_blocks)
+
     return method_instructions
 
 
@@ -449,7 +451,8 @@ def static_analysis(binary_file):
         slice_addresses += list(mach_info.functions.keys())
 
         # address = mach_info.get_method_address('PDDCrashManager', 'extractDataFromCrashReport:keyword:')
-        address = mach_info.get_method_address('PDDCrashManager', 'setup')
+        # address = mach_info.get_method_address('PDDCrashManager', 'setup')
+        address = mach_info.get_method_address('KSCrashInstallationConsole', 'sharedInstance')
 
         def cfg_provider(class_name, imp_name):
             instruction = MethodStorage.get_instructions(class_name, imp_name)

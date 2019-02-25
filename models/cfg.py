@@ -41,7 +41,7 @@ class CFG:
             block.describe()
 
     def graphviz_obj(self):
-
+        print(len(self.all_blocks))
         cfg_view = Digraph(self.name)
         for block in self.all_blocks:
 
