@@ -44,13 +44,23 @@ class CFG:
 
         cfg_view = Digraph(self.name)
         for block in self.all_blocks:
+
+            node_name = block.name
+            node_label = ''
             for node in block.nodes:
-                if type(node) == CFGNode:
-                    node_name = block.name + str(block.nodes.index(node))
-                    node_label = node.describe(False)
-                    cfg_view.node(node_name, node_label)
-                elif type(node) == CFG:
-                    pass
+                # node_name = block.name + str(block.nodes.index(node))
+
+                node_label += node.describe(False)[1:-1]
+                node_label += '\n'
+                # cfg_view.node(node_name, node_label)
+            if len(node_label) == 0:
+                node_label = '{NON_API_CALLED}'
+            cfg_view.node(node_name, node_label, shape='box')
+
+        for block in self.all_blocks:
+            for follow in block.follow_blocks:
+                # print(type(follow))
+                cfg_view.edge(block.name, follow)
 
         return cfg_view
 
@@ -116,6 +126,7 @@ class CFGBlock:
         self.follow_blocks.append(block)
 
     def describe(self):
+        print('======================================================')
         for i in range(len(self.nodes) - 1):
             self.nodes[i].describe()
             print('||')
@@ -140,10 +151,12 @@ class CFGNode:
 
     def describe(self, verbose=True):
         if self.type == CFGNodeTypeFunction:
-            print('<%s>' % self.function_name)
+            if verbose:
+                print('<%s>' % self.function_name)
             describe = '<' + self.function_name + '>'
         else:
-            print('<%s: %s>' % (self.class_name, self.method_name))
+            if verbose:
+                print('<%s: %s>' % (self.class_name, self.method_name))
             describe = '<' + self.class_name + ': ' + self.method_name + '>'
         return describe
 

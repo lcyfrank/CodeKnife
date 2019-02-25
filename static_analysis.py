@@ -189,6 +189,7 @@ def _contain_return_of_block(block):
     return False
 
 
+# 分析基本块的可达性
 def _analyse_reachable_of_basic_blocks(basic_blocks):
     reachable = []
     wait_to_analyse = []
@@ -236,14 +237,10 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
     for i in range(len(block_instruction)):
         inter.interpret_code(block_instruction, begin=i, end=i+1)
         cs_insn = block_instruction[i]
-        # if cs_insn.address == 0x100007ed0:
-            # print(cs_insn.mnemonic, cs_insn.op_str)
-            # inter.current_state()
-            # print(cs_insn.reg_name(cs_insn.operands[1].value.mem.base),
-            #       cs_insn.reg_name(cs_insn.operands[1].value.mem.index),
-            #       cs_insn.operands[1].value.mem.disp)
+
         insn_str = hex(cs_insn.address) + '\t' + cs_insn.bytes.hex() + '\t' + cs_insn.mnemonic + '\t' + cs_insn.op_str
         instruction = Instruction(insn_str)
+        instruction.address = cs_insn.address
         if cs_insn.id == ARM64_INS_BL or cs_insn.id == ARM64_INS_BLR:
             operand = cs_insn.operands[0]
             if operand.type == ARM64_OP_IMM:
@@ -335,8 +332,18 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                         inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
         elif cs_insn.id == ARM64_INS_B:
             address_op = cs_insn.operands[-1]
-            if len(cs_insn.mnemonic) == 1:
+            if len(cs_insn.mnemonic) == 1:  # 无条件跳转
                 basic_block.jump_condition = False
+                # 无条件跳转出去了是不是也是返回了？
+                # 现在先处理无条件跳转到一些意味着返回的方法
+                if address_op.type == ARM64_OP_IMM:
+                    jump_address = address_op.imm
+                    if hex(jump_address) in mach_info.functions:  # jump to a function
+                        function = hex(mach_info.functions[hex(jump_address)])
+                        function_name = mach_info.symbols[function]
+                        if (function_name == '_objc_autoreleaseReturnValue' or
+                            function_name == '_objc_retainAutoreleaseReturnValue'):
+                            basic_block.is_return = True
             else:
                 basic_block.jump_condition = True
             if address_op.type == ARM64_OP_IMM:
@@ -441,7 +448,8 @@ def static_analysis(binary_file):
         slice_addresses = list(mach_info.methods.keys())
         slice_addresses += list(mach_info.functions.keys())
 
-        address = mach_info.get_method_address('ABKWelcomeViewController', 'viewDidLoad')
+        # address = mach_info.get_method_address('PDDCrashManager', 'extractDataFromCrashReport:keyword:')
+        address = mach_info.get_method_address('PDDCrashManager', 'setup')
 
         def cfg_provider(class_name, imp_name):
             instruction = MethodStorage.get_instructions(class_name, imp_name)
@@ -458,12 +466,9 @@ def static_analysis(binary_file):
         if address is not None:
             method = _disasm_specified_function(arch, mode, mach_info.text, int(address, 16), mach_info.text_addr, slice_addresses)
             instruction = _analyse_method(method, mach_info)
-            instruction.describe()
+            # instruction.describe()
             MethodStorage.insert_instructions(instruction)
             # MethodStorage.list_all()
-
-
-
 #         method_instructions = MethodStorage.get_instructions('ABKWelcomeViewController', 'viewDidLoad')
             cfg = generate_cfg(instruction, cfg_provider, True)
             # cfg.describe()

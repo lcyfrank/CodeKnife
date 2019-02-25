@@ -86,6 +86,7 @@ class MethodInstructions:
 class Instruction:
 
     def __init__(self, instruction):
+        self.address = 0
         self.instruction = instruction
         self.goto_insns = None
         self.block_data = None

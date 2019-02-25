@@ -93,8 +93,8 @@ class MachObject:
 
         self.parse_dylib_class()
         # print(self.dylibs['0x10207e840'])
-        for key in self.dylibs:
-            print(key, self.symbols[hex(self.dylibs[key])])
+        # for key in self.dylibs:
+        #     print(key, self.symbols[hex(self.dylibs[key])])
 
         self.parse_symtab()       # 修改成兼容 32-bit 和 64-bit
         self.parse_methname()
@@ -236,7 +236,7 @@ class MachObject:
 
                 self.block_methods[dylib_addr] = block_data
                 self.methods[hex(block_data.invoke)] = '$Block', dylib_addr
-                print(self.methods[hex(block_data.invoke)])
+                # print(self.methods[hex(block_data.invoke)])
 
     def parse_cfstring(self):
         cfstring, _ = self._sections["cfstring"]
