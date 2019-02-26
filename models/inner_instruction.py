@@ -20,6 +20,7 @@ class MethodStorage:
             print(_method_insn.class_name + ": " + _method_insn.method_name)
 
 
+# Basic Block 不同于 OC 中的 Block
 class MethodBasicBlockStorage:
 
     _method_basic_block_instructions = []
@@ -70,7 +71,7 @@ class MethodInstructions:
         self.class_name = class_name
         self.method_name = method_name
         self.entry_block = None
-        self.all_blocks = {}  # <identity: block>
+        self.all_blocks = {}  # <identity: block>  这个 Block 也不是 OC 的 Block
 
     def describe(self):
         print("<%s: %s>" % (self.class_name, self.method_name))
@@ -89,10 +90,10 @@ class Instruction:
         self.address = 0
         self.instruction = instruction
         self.goto_insns = None
-        self.block_data = None
+        self.block_data = []  # 这个 Block 代表 OC 的 Block
 
     def goto(self, class_name, method_name):
         self.goto_insns = (class_name, method_name)
 
-    def block_callback(self, block_data):
-        self.block_data = block_data
+    def block_callback(self, block_name):
+        self.block_data.append(('$Block', block_name))

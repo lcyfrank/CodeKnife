@@ -40,29 +40,60 @@ class CFG:
         for block in self.all_blocks:
             block.describe()
 
-    def graphviz_obj(self):
-        print(len(self.all_blocks))
-        cfg_view = Digraph(self.name)
+    # def graphviz_block(self, block, graphviz_cfg):
+    #
+    #     oc_block_cfgs = []
+    #     node_name = block.name
+    #     node_label = ''
+    #     for node in block.nodes:
+    #         node_label += node.describe(False)[1:-1]
+    #         node_label += '\n'
+    #         for oc_block_cfg in node.oc_blocks:
+    #             oc_block_cfgs.append(oc_block_cfg)
+    #     if len(node_label) == 0:
+    #         node_label = '{NON_API_CALLED}'
+    #     graphviz_cfg.node(node_name, node_label, shape='box')
+    #
+    #     for oc_block_cfg in oc_block_cfgs:
+    #         for block in oc_block_cfg.all_blocks:
+    #             if block == oc_block_cfg.entry:
+
+
+        # return node_name
+
+    def graphviz_obj(self, graphviz_cfg):
+        # print(len(self.all_blocks))
         for block in self.all_blocks:
+
+            oc_block_cfgs = []
 
             node_name = block.name
             node_label = ''
             for node in block.nodes:
                 # node_name = block.name + str(block.nodes.index(node))
-
                 node_label += node.describe(False)[1:-1]
                 node_label += '\n'
+                for oc_block_cfg in node.oc_blocks:
+                    oc_block_cfgs.append(oc_block_cfg)
                 # cfg_view.node(node_name, node_label)
             if len(node_label) == 0:
                 node_label = '{NON_API_CALLED}'
-            cfg_view.node(node_name, node_label, shape='box')
+            graphviz_cfg.node(node_name, node_label, shape='box')
+
+            for oc_block_cfg in oc_block_cfgs:
+                oc_block_cfg.graphviz_obj(graphviz_cfg)
+                graphviz_cfg.edge(node_name, oc_block_cfg.entry.name)
+                for block in oc_block_cfg.all_blocks:
+                    if block.out:
+                        print('dsafjshfkjhsdjklfhdasjklhfjklsdhfjkdsahfjksh')
+                        graphviz_cfg.edge(block.name, node_name)
 
         for block in self.all_blocks:
             for follow in block.follow_blocks:
                 # print(type(follow))
-                cfg_view.edge(block.name, follow)
+                graphviz_cfg.edge(block.name, follow)
 
-        return cfg_view
+        # return graphviz_cfg
 
         # block_nodes = {}
         # cfg_view = Digraph(self.name)
@@ -109,7 +140,9 @@ class CFG:
         # return cfg_view
 
     def view(self):
-        self.graphviz_obj().view()
+        graphviz_cfg = Digraph(self.name)
+        self.graphviz_obj(graphviz_cfg)
+        graphviz_cfg.view()
 
 class CFGBlock:
 
@@ -142,6 +175,7 @@ class CFGNode:
         self.class_name = ''
         self.method_name = ''
         self.function_name = ''
+        self.oc_blocks = []
 
     def node_info(self):
         if self.type == CFGNodeTypeFunction:

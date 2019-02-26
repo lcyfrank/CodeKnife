@@ -87,7 +87,7 @@ class MachObject:
         self.cat_datas = {}         # data_address: < name, class_name, methods >
 
         # 解析 Block
-        self.block_methods = {}     # data_address: <block_method data>
+        self.block_methods = {}     # data_address: <block_method_data>
 
         self.cfstrings = {}
 
@@ -171,7 +171,7 @@ class MachObject:
         if method == 'view':
             return 'UIView'
         if method.startswith('alloc') or method.startswith('init'):
-            return _class
+            return '$SELF'
         # if _class == 'UILabel' and method == 'alloc':
         #     return 'UILabel'
         return 'id'

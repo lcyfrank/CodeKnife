@@ -19,6 +19,7 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
                 # print('')
                 wait_for_follow = []
 
+        # 对于调用有 Block 的方法，现在还想不到好的解决办法
         if instruction.goto_insns:  # 如果有调用函数
             basic_info, imp_name = instruction.goto_insns
             if basic_info == '$Function':  # function
@@ -44,6 +45,13 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
                         continue
                 cfg_node = CFGNode(CFGNodeTypeFunction)
                 cfg_node.function_name = imp_name
+                if len(instruction.block_data) > 0:
+                    # 生成 Block 的 CFG
+                    for _, oc_block in instruction.block_data:
+                        oc_block_imp = info_provider('$Block', oc_block)
+                        if oc_block_imp is not None:
+                            oc_block_cfg = generate_cfg(oc_block_imp, info_provider, True)
+                            cfg_node.oc_blocks.append(oc_block_cfg)
             else:
                 if recursive and basic_info != class_name and imp_name != method_name:
                     # print('find recursive method')
@@ -56,18 +64,25 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
                         cfg_blocks.append(cfg_block)
 
                         for rec_block in recursive_cfg.all_blocks:
-                            print(rec_block.name, end=' ')
+                            # print(rec_block.name, end=' ')
 
                             cfg_blocks.append(rec_block)
                             if rec_block.out:
                                 rec_block.out = False
                                 wait_for_follow.append(rec_block)
-                        print('')
+                        # print('')
                         cfg_block = None
                         continue
                 cfg_node = CFGNode(CFGNodeTypeMethod)
                 cfg_node.class_name = basic_info
                 cfg_node.method_name = imp_name
+                if len(instruction.block_data) > 0:
+                    # 生成 Block 的 CFG
+                    for _, oc_block in instruction.block_data:
+                        oc_block_imp = info_provider('$Block', oc_block)
+                        if oc_block_imp is not None:
+                            oc_block_cfg = generate_cfg(oc_block_imp, info_provider, True)
+                            cfg_node.oc_blocks.append(oc_block_cfg)
             cfg_block.add_node(cfg_node)
 
     if cfg_block is not None:

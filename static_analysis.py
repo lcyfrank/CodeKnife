@@ -238,6 +238,9 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
         inter.interpret_code(block_instruction, begin=i, end=i+1)
         cs_insn = block_instruction[i]
 
+        if cs_insn.address == 0x1001f910c:
+            inter.current_state()
+
         insn_str = hex(cs_insn.address) + '\t' + cs_insn.bytes.hex() + '\t' + cs_insn.mnemonic + '\t' + cs_insn.op_str
         instruction = Instruction(insn_str)
         instruction.address = cs_insn.address
@@ -250,10 +253,31 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                     continue
                 function_name = mach_info.symbols[hex(_function)]
                 if function_name == "_objc_msgSendSuper2":
-                    instruction.goto(class_data.super, method_name)
+                    # 调用父类方法也要处理返回值
+                    reg1_value = inter.gen_regs[1].value
+                    meth_name = mach_info.symbols[hex(reg1_value)]
+                    return_type = mach_info.get_return_type_from_method(class_data.super, meth_name)
+
+                    if return_type == '$SELF':
+                        return_type = class_name
+                    # if obj_name == 'UIScreen':
+                    #     print(meth_name)
+                    #     print(return_type)
+                    # 返回值这一块还得处理
+                    # if return_type == 'id' or return_type == 'UILabel':  # Now is id
+                    if not return_type == 'void':
+                        _g_return_types.append(return_type)
+                        inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
+                    instruction.goto(class_data.super, meth_name)
+
                 elif function_name == "_dispatch_once":  # 实际上就可以把这个指令换成 Block 内部的指令
                     instruction.goto('$Function', function_name)
-                    instruction.block_callback(inter.gen_regs[1].value)
+                    # 因为 dispatch_once 获得了一个 Block 进行调用
+                    reg1_value = inter.gen_regs[1].value
+                    block_data = mach_info.block_methods[hex(reg1_value)]
+                    _, block_name = mach_info.methods[hex(block_data.invoke)]
+                    # 这样对 Block，之后也可以直接使用查询方法的形式进行展示
+                    instruction.block_callback(block_name)
                 elif function_name == "_objc_msgSend":
                     reg0_value = inter.gen_regs[0].value
                     reg1_value = inter.gen_regs[1].value
@@ -313,6 +337,8 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                         break
 
                     return_type = mach_info.get_return_type_from_method(obj_name, meth_name)
+                    if return_type == '$SELF':
+                        return_type = class_name
                     # if obj_name == 'UIScreen':
                     #     print(meth_name)
                     #     print(return_type)
@@ -424,7 +450,7 @@ def _analyse_method(method, mach_info):
             if method_instructions.entry_block is None:
                 method_instructions.entry_block = block
 
-    print(method_instructions.all_blocks)
+    # print(method_instructions.all_blocks)
 
     return method_instructions
 
@@ -452,7 +478,8 @@ def static_analysis(binary_file):
 
         # address = mach_info.get_method_address('PDDCrashManager', 'extractDataFromCrashReport:keyword:')
         # address = mach_info.get_method_address('PDDCrashManager', 'setup')
-        address = mach_info.get_method_address('KSCrashInstallationConsole', 'sharedInstance')
+        # address = mach_info.get_method_address('KSCrashInstallationConsole', 'sharedInstance')
+        address = mach_info.get_method_address('KSCrashInstallationConsole', 'init')
 
         def cfg_provider(class_name, imp_name):
             instruction = MethodStorage.get_instructions(class_name, imp_name)
