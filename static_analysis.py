@@ -232,7 +232,7 @@ def _analyse_reachable_of_basic_blocks(basic_blocks):
     return reachable
 
 
-def _analyse_basic_block(block_instruction, identify, mach_info, class_data, class_name, method_name, inter):
+def _analyse_basic_block(block_instruction, identify, mach_info, class_data, class_name, method_name, inter, add_range):
     basic_block = MethodBasicBlockInstructions(identify)
     for i in range(len(block_instruction)):
         inter.interpret_code(block_instruction, begin=i, end=i+1)
@@ -338,7 +338,7 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
 
                     return_type = mach_info.get_return_type_from_method(obj_name, meth_name)
                     if return_type == '$SELF':
-                        return_type = class_name
+                        return_type = obj_name
                     # if obj_name == 'UIScreen':
                     #     print(meth_name)
                     #     print(return_type)
@@ -364,12 +364,16 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                 # 现在先处理无条件跳转到一些意味着返回的方法
                 if address_op.type == ARM64_OP_IMM:
                     jump_address = address_op.imm
-                    if hex(jump_address) in mach_info.functions:  # jump to a function
-                        function = hex(mach_info.functions[hex(jump_address)])
-                        function_name = mach_info.symbols[function]
-                        if (function_name == '_objc_autoreleaseReturnValue' or
-                            function_name == '_objc_retainAutoreleaseReturnValue'):
-                            basic_block.is_return = True
+                    begin, end = add_range
+                    if not (begin <= jump_address <= end):
+                        basic_block.is_return = True
+                    # if hex(jump_address) in mach_info.functions:  # jump to a function
+                    #     function = hex(mach_info.functions[hex(jump_address)])
+                    #     function_name = mach_info.symbols[function]
+
+                        # if (function_name == '_objc_autoreleaseReturnValue' or
+                        #     function_name == '_objc_retainAutoreleaseReturnValue'):
+                        #     basic_block.is_return = True
             else:
                 basic_block.jump_condition = True
             if address_op.type == ARM64_OP_IMM:
@@ -425,7 +429,7 @@ def _analyse_method(method, mach_info):
     for block_instructions in basic_blocks_instructions:
         if block_instructions[0].address in reachable_blocks_queue:  # if this block can be reached
             block = _analyse_basic_block(block_instructions, hex(block_instructions[0].address), mach_info, class_data,
-                                         class_name, method_name, inter)
+                                         class_name, method_name, inter, (method[0].address, method[-1].address))
 
             method_instructions.all_blocks[block.identify] = block
             MethodBasicBlockStorage.insert_instructions(block)
@@ -477,9 +481,9 @@ def static_analysis(binary_file):
         slice_addresses += list(mach_info.functions.keys())
 
         # address = mach_info.get_method_address('PDDCrashManager', 'extractDataFromCrashReport:keyword:')
-        # address = mach_info.get_method_address('PDDCrashManager', 'setup')
-        # address = mach_info.get_method_address('KSCrashInstallationConsole', 'sharedInstance')
-        address = mach_info.get_method_address('KSCrashInstallationConsole', 'init')
+        address = mach_info.get_method_address('PDDCrashManager', 'setup')
+        # address = mach_info.get_method_address('KSCrashInstallationasConsole', 'sharedInstance')
+        # address = mach_info.get_method_address('KSCrashInstallationConsole', 'init')
 
         def cfg_provider(class_name, imp_name):
             instruction = MethodStorage.get_instructions(class_name, imp_name)
