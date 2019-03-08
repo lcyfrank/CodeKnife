@@ -44,7 +44,7 @@ class MethodBasicBlockInstructions:
         self.instructions = []
 
         self.jump_to_block = None  # identify
-        self.jump_condition = True
+        self.jump_condition = None  # 跳转条件，字符串
 
         self.is_return = False
         self.next_block = None  # identify

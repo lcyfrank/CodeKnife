@@ -1,0 +1,56 @@
+html {
+    height: 100%;
+}
+
+body {
+    height: 100%;
+    background: RGB(236, 239, 244);
+}
+
+#upload-card {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 700px;
+    height: 450px;
+    margin-left: -350px;
+    margin-top: -225px;
+    border-radius: 20px;
+    background: #fff;
+}
+
+#title-label {
+    margin-top: 200px;
+    margin-left: 50px;
+    margin-bottom: 0px;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+#brief-label {
+    margin-left: 50px;
+    color: #999999;
+    font-style: italic;
+}
+
+#upload-button {
+    background: #5a9cff;
+    color: white;
+    border-width: 0px;
+    border-radius: 18px;
+    width: 130px;
+    height: 36px;
+    margin-top: 20px;
+    margin-left: 50px;
+    outline: none;
+}
+
+#upload-button:active {
+    background: #366dbf;
+}
+
+#upload-tip {
+    color: #bbb;
+    font-size: 10px;
+    margin-top: 10px;
+    margin-left: 50px;
+}

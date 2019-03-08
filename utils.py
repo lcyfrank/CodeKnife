@@ -1,4 +1,5 @@
 import ctypes
+from datetime import datetime
 # Inner Function
 def parse_int(_bytes, little_end=True):
     if not little_end:
@@ -52,5 +53,26 @@ def uleb128(_bytes, offset=0x0):
         p = _bytes[offset]
     result = ctypes.c_int64(result).value
     return (result, offset - start)
-    
 
+
+def sorted_list_for_hex_string(l):
+    def convert_to_int(s):
+        return int(s, 16)
+
+    def convert_to_str(i):
+        return hex(i)
+    # before = datetime.now()
+    l = list(map(convert_to_int, l))
+    # after = datetime.now()
+    # print((after - before).microseconds)
+
+    # before = datetime.now()
+    l.sort()
+    # after = datetime.now()
+    # print((after - before).microseconds)
+
+    # before = datetime.now()
+    l = list(map(convert_to_str, l))
+    # after = datetime.now()
+    # print((after - before).microseconds)
+    return l

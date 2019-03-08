@@ -15,6 +15,10 @@ class ClassData:
         if ivar not in self.ivars:
             self.ivars.append(ivar)
 
+    def insert_property(self, _property):
+        if _property not in self.properties:
+            self.properties.append(_property)
+
 
 class CatData:
 
@@ -56,6 +60,13 @@ class BlockMethodData:
     def __init__(self, type=BlockMethodTypeStack):
         self.type = type
         self.invoke = 0
+
+
+class ArgumentData:
+
+    def __init__(self, type, length):
+        self.type = type
+        self.length = length
 
 
 MethodDataTypeClass = 0

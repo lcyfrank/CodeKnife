@@ -19,6 +19,7 @@ class CFG:
 
     def get_block(self, name):
         for block in self.all_blocks:
+            # print(name)
             if block.name == name:
                 return block
         return None
@@ -82,16 +83,18 @@ class CFG:
 
             for oc_block_cfg in oc_block_cfgs:
                 oc_block_cfg.graphviz_obj(graphviz_cfg)
-                graphviz_cfg.edge(node_name, oc_block_cfg.entry.name)
+                graphviz_cfg.edge(node_name, oc_block_cfg.entry.name, style="dashed")
                 for block in oc_block_cfg.all_blocks:
                     if block.out:
-                        print('dsafjshfkjhsdjklfhdasjklhfjklsdhfjkdsahfjksh')
-                        graphviz_cfg.edge(block.name, node_name)
+                        graphviz_cfg.edge(block.name, node_name, style="dashed")
 
         for block in self.all_blocks:
             for follow in block.follow_blocks:
                 # print(type(follow))
-                graphviz_cfg.edge(block.name, follow)
+                if follow in block.follow_label:
+                    graphviz_cfg.edge(block.name, follow, label=block.follow_label[follow])
+                else:
+                    graphviz_cfg.edge(block.name, follow)
 
         # return graphviz_cfg
 
@@ -151,12 +154,15 @@ class CFGBlock:
         self.out = False  # if this block contains `ret` instruction
         self.nodes = []  # node 包括 node 或者 cfg
         self.follow_blocks = []  # the blocks follow this block (name)
+        self.follow_label = {}   # the follow label {name: label}
 
     def add_node(self, node):
         self.nodes.append(node)
 
-    def goto_block(self, block):
+    def goto_block(self, block, label=None):
         self.follow_blocks.append(block)
+        if label is not None:
+            self.follow_label[block] = label
 
     def describe(self):
         print('======================================================')

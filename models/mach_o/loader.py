@@ -144,8 +144,8 @@ class LoadCommand(MachBase):
 
 
 class RpathCommand(LoadCommand):
-    RC_TOTAL_SIZE = 16
-    RC_PATH_RANGE = (8, 8)
+    RC_TOTAL_SIZE = 12
+    RC_PATH_RANGE = (8, 4)
 
     def __init__(self):
         super(RpathCommand, self).__init__()
@@ -156,7 +156,7 @@ class RpathCommand(LoadCommand):
         rc = cls()
         rc.cmd = parse_int(_bytes[0:4])
         rc.cmdsize = parse_int(_bytes[4:8])
-        rc.path = parse_int(_bytes[8:16])
+        rc.path = parse_int(_bytes[8:12])
         return rc
 
     def get_size(self):
