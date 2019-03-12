@@ -112,7 +112,8 @@ class MachObject:
 
         self.text = self.generate_text()
         text_section, _ = self._sections['text']
-        self.text_addr = text_section.addr
+        # warningwarningwarning！！！！！！
+        self.text_addr = text_section.addr  # 代码的内存（不是 offset）
 
         self.symbols = {}           # address: name
         self.ivar_refs = {}         # <> : index
@@ -126,8 +127,11 @@ class MachObject:
         # self.properties = {}
 
         # self.methods 中的方法均为开发人员实现的方法，包括类中的方法和分类中的方法
+        self.class_methods = {}     # class_name: {method_name: address}
         self.methods = {}           # impaddr: (class, method)  / impaddr: (block, block)
-        self.methods_type = {}      # class: [<method_data>]
+        self.methods_type = {}      # (class, method): <method_data>
+
+        self.class_name_address = {}  # name: data_address
         self.class_datas = {}       # data_address: < name, super_name, methods >
         self.cat_datas = {}         # data_address: < name, class_name, methods >
 
@@ -160,20 +164,15 @@ class MachObject:
         self.parse_class_methods_and_data()
         self.parse_cat_methods_and_data()
         self.parse_cfstring()
-
-        # print(self.ivar_refs)
-        # self.parse_ivars()
-
-        # print(self.statics)
-        # print(self.symbols)
-
-
+        # print(self.dylib_frameworks_pair)
 
     def get_dylib_frameworks(self, framework_path):
-        print(framework_path)
-        print('dsfsakfdsklfjkldsjflkdsjfklsjfkldsjklfjdsklfjklsjfklsjfkldsjfklsjfklsjfklsdjfl')
+
         if framework_path in self.dylib_frameworks_mach:
             return self.dylib_frameworks_mach[framework_path]
+
+        if "load_rpath" not in self._cmds:
+            return None
 
         rpath_cmd = self._cmds["load_rpath"]
         rpaths = []
@@ -215,13 +214,14 @@ class MachObject:
                     dylib_macho = MachObject(dylib_macho_bytes, _type=MachObjectTypeDylib)
                     self.dylib_frameworks_mach[framework_path] = dylib_macho
                     return dylib_macho
+        return None
 
     # 从本二进制文件中得到方法地址
     def get_method_address(self, class_name, method_name):
-        for key in self.methods:
-            _class_name, _method_name = self.methods[key]
-            if _class_name == class_name and _method_name == method_name:
-                return key
+        if class_name in self.class_methods:
+            class_method = self.class_methods[class_name]
+            if method_name in class_method:
+                return class_method[method_name]
         return None
 
     def get_memory_content(self, address, size):
@@ -238,7 +238,6 @@ class MachObject:
             if hex(address - SELF_POINTER) in self.ivar_refs:
                 return self.ivar_refs[hex(address - SELF_POINTER)]
             else:
-                # print(address_key)
                 if self.type == MachObjectTypeExecutable:
                     if self.is_64_bit:
                         address = address - 0x100000000
@@ -259,13 +258,12 @@ class MachObject:
         return text_code
 
     def get_property_of_class(self, _class, name):
-        for class_addr in self.class_datas:
-            class_data = self.class_datas[class_addr]
-            if class_data.name == _class:
-                for _property in class_data.properties:
-                    if _property.name == name:
-                        return _property
-                break
+        if _class in self.class_name_address:
+            class_address = self.class_name_address[_class]
+            class_data = self.class_datas[hex(class_address)]
+            for _property in class_data.properties:
+                if _property.name == name:
+                    return _property
         return None
 
     # 方法的返回值
@@ -274,31 +272,31 @@ class MachObject:
             _property = self.get_property_of_class(_class, method)
             if _property is not None:
                 return _property._type
-
-        for method_data in self.methods_type[_class]:
-            if method_data.name == method:
-                return method_data.return_type
         if _class == 'UIScreen' and method == 'mainScreen':
             return 'UIScreen'
+        if _class == 'UIPasteboard' and method == 'generalPasteboard':
+            return 'UIPasteboard'
         if method == 'view':
             return 'UIView'
         if method.startswith('alloc') or method.startswith('init'):
             return '$SELF'
-
-        # if _class == 'UILabel' and method == 'alloc':
-        #     return 'UILabel'
-        return 'id'
+        if (_class, method) not in self.methods_type:
+            return 'id'
+        method_type = self.methods_type[(_class, method)]
+        return method_type.return_type
 
     # 方法的参数列表
     def get_arguments_from_methd(self, _class, method):
 
-        for method_data in self.methods_type[_class]:
-            if method_data.name == method:
-                return method_data.arguments_type
-        return []
+        if (_class, method) not in self.methods_type:
+            return []
+        method_type = self.methods_type[(_class, method)]
+        return method_type.arguments_type
 
     # 函数的返回值
     def get_return_type_from_function(self, name):
+        if name == '___stack_chk_fail':
+            return 'void'
         for function_data in self.functions_type:
             if function_data.name == name:
                 return function_data.return_type
@@ -369,6 +367,9 @@ class MachObject:
                 self.block_methods[dylib_addr] = block_data
                 if hex(block_data.invoke) != '0x0':
                     self.methods[hex(block_data.invoke)] = '$Block', hex(block_data.invoke)
+                    if '$Block' not in self.class_methods:
+                        self.class_methods['$Block'] = {}
+                    self.class_methods['$Block'][hex(block_data.invoke)] = block_data.invoke
                 # print(self.methods[hex(block_data.invoke)])
 
     def parse_cfstring(self):
@@ -565,10 +566,15 @@ class MachObject:
                     method_type = MethodData(cat_data._class, objc_method_name)
                     method_type.return_type = return_type
                     method_type.arguments_type = method_args
-                    if cat_data._class not in self.methods_type:
-                        self.methods_type[cat_data._class] = []
-                    self.methods_type[cat_data._class].append(method_type)
+                    self.methods_type[(cat_data._class, objc_method_name)] = method_type
+                    # if cat_data._class not in self.methods_type:
+                    #     self.methods_type[cat_data._class] = []
+                    # self.methods_type[cat_data._class].append(method_type)
                     self.methods[hex(objc_method_implementation)] = cat_data._class, objc_method_name
+                    if cat_data._class not in self.class_methods:
+                        self.class_methods[cat_data._class] = {}
+                    self.class_methods[cat_data._class][objc_method_name] = objc_method_implementation
+
                     cat_data.insert_instance_method(objc_method_name)
 
             # class methods
@@ -603,11 +609,14 @@ class MachObject:
                     method_type = MethodData(cat_data._class, objc_method_name)
                     method_type.return_type = return_type
                     method_type.arguments_type = method_args
-                    if cat_data._class not in self.methods_type:
-                        self.methods_type[cat_data._class] = []
-                    self.methods_type[cat_data._class].append(method_type)
+                    # if cat_data._class not in self.methods_type:
+                    #     self.methods_type[cat_data._class] = []
+                    self.methods_type[(cat_data._class, objc_method_name)] = method_type
                     self.methods[hex(objc_method_implementation)] = (
                         cat_data._class, objc_method_name)
+                    if cat_data._class not in self.class_methods:
+                        self.class_methods[cat_data._class] = {}
+                    self.class_methods[cat_data._class][objc_method_name] = objc_method_implementation
                     cat_data.insert_class_method(objc_method_name)
 
             # properties
@@ -848,8 +857,8 @@ class MachObject:
 
                 for j in range(objc_method_list.method_count):
                     om_bytes_begin = (oml_bytes_begin + objc_method_list.get_size() + j *
-                                  (ObjcMethod.OM_TOTAL_SIZE if not self.is_64_bit
-                                   else ObjcMethod64.OM_TOTAL_SIZE))
+                                     (ObjcMethod.OM_TOTAL_SIZE if not self.is_64_bit
+                                      else ObjcMethod64.OM_TOTAL_SIZE))
                     om_bytes_end = om_bytes_begin + (ObjcMethod.OM_TOTAL_SIZE if not self.is_64_bit
                                                      else ObjcMethod64.OM_TOTAL_SIZE)
                     om_bytes = self.bytes[om_bytes_begin:om_bytes_end]
@@ -858,18 +867,33 @@ class MachObject:
                     else:
                         objc_method = ObjcMethod.parse_from_bytes(om_bytes)
                     objc_method_implementation = objc_method.implementation
+                    # print('asdfsadsdfsadfsdafsfsafdsafsfsfsfassfsd')
+                    # print(hex(om_bytes_begin), hex(om_bytes_end), om_bytes.hex())
+                    # print(hex(objc_method.name))
+
                     objc_method_name = self.symbols[hex(objc_method.name)]
+                    # print('dakfljsadlkfjsdaklf')
+                    # print(objc_method_name)
+                    # print('dalskfskldhfkldjsahfklsa')
+
+                    # print(hex(objc_method.name))
+                    # print(objc_method_name)
+                    # print(self.symbols[hex(objc_method.name)])
+
                     objc_method_signature = self.symbols[hex(objc_method.signature)]
                     # 获得方法返回值和参数
                     return_type, method_args = self.analysis_method_signature(objc_method_signature)
                     method_type = MethodData(class_name, objc_method_name)
                     method_type.return_type = return_type
                     method_type.arguments_type = method_args
-                    if class_name not in self.methods_type:
-                        self.methods_type[class_name] = []
-                    self.methods_type[class_name].append(method_type)
+                    # if class_name not in self.methods_type:
+                    #     self.methods_type[class_name] = []
+                    self.methods_type[(class_name, objc_method_name)] = method_type
                     self.methods[hex(objc_method_implementation)] = (
                         class_name, objc_method_name)
+                    if class_name not in self.class_methods:
+                        self.class_methods[class_name] = {}
+                    self.class_methods[class_name][objc_method_name] = objc_method_implementation
                     class_data.insert_method(objc_method_name)
 
             # 解析类方法
@@ -906,10 +930,13 @@ class MachObject:
                     method_type = MethodData(class_name, objc_method_name, MethodDataTypeClass)
                     method_type.return_type = return_type
                     method_type.arguments_type = method_args
-                    if class_name not in self.methods_type:
-                        self.methods_type[class_name] = []
-                    self.methods_type[class_name].append(method_type)
+                    # if class_name not in self.methods_type:
+                    #     self.methods_type[class_name] = []
+                    self.methods_type[(class_name, objc_method_name)] = method_type
                     self.methods[hex(objc_method_implementation)] = (class_name, objc_method_name)
+                    if class_name not in self.class_methods:
+                        self.class_methods[class_name] = {}
+                    self.class_methods[class_name][objc_method_name] = objc_method_implementation
                     class_data.insert_method(objc_method_name)
 
             # 解析 ivars
@@ -938,7 +965,6 @@ class MachObject:
                     else:
                         objc_ivar = ObjcIvar.parse_from_bytes(oi_bytes)
                     objc_ivar_name = self.symbols[hex(objc_ivar.name)]
-
                     objc_ivar_type = self.symbols[hex(objc_ivar.type)]
                     if "@" in objc_ivar_type:
                         objc_ivar_type_begin = objc_ivar_type.find("@\"") + 2
@@ -959,6 +985,9 @@ class MachObject:
                     ivar_offset = parse_int(
                         self.bytes[ivar_offset_begin:ivar_offset_begin + (8 if self.is_64_bit else 4)])
                     self.ivars[hex(ivar_offset_pointer)] = ivar_offset
+                    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    # ivar 有问题  !!!!!!!!!!!!!!!!!!!!!!!!!!
+                    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                     # print('ivar_offset: ' + hex(ivar_offset))
                     self.ivar_refs[hex(ivar_offset)] = len(
                         class_data.ivars) - 1
@@ -1050,12 +1079,14 @@ class MachObject:
                     super_data = ObjcData.parse_from_bytes(super_data_bytes)
                 super_name = self.symbols[hex(super_data.name)]
                 class_data.super = super_name
+            self.class_name_address[class_name] = parse_int(class_bytes)
             self.class_datas[hex(parse_int(class_bytes))] = class_data
             count += 1
 
     def parse_methtype(self):
         methtype, _ = self._sections["objc_methtype"]
         base_addr = methtype.addr
+        # print(hex(base_addr))
         if self.type == MachObjectTypeExecutable:
             begin_pointer = base_addr - self.offset if not self.is_64_bit else base_addr - 0x100000000
         else:
@@ -1063,7 +1094,6 @@ class MachObject:
         end_pointer = begin_pointer + methtype.size
         while begin_pointer < end_pointer:
             name_begin = begin_pointer
-
             methtype_key = hex(base_addr)
             if self.bytes[name_begin:name_begin + 1] == b'\x00':
                 self.symbols[methtype_key] = ''
@@ -1072,7 +1102,10 @@ class MachObject:
             else:
                 name_end = self.bytes.find(b'\x00', name_begin + 1)
                 name_bytes = self.bytes[name_begin:name_end]
+                # print(methtype_key)
                 self.symbols[methtype_key] = parse_str(name_bytes)
+                # print(hex(name_begin + 0x100000000), name_bytes.hex())
+
                 base_addr += (name_end - name_begin + 1)
                 begin_pointer = name_end + 1
 
@@ -1184,7 +1217,7 @@ class MachObject:
         symoff = symtab.symoff
         nlist_size = Nlist.N_TOTAL_SIZE
 
-        indirectsymoff = dysymtab.indirectsymoff
+        indirectsymoff = dysymtab.indirectsymoff  # 获得动态符号表偏移
         offset = picsymbolstub4.reserved1
         total_size = picsymbolstub4.size
         each_size = picsymbolstub4.reserved2
@@ -1216,7 +1249,15 @@ class MachObject:
                 symbol_addr = symtab.stroff + nlist.n_strx
                 if self.type == MachObjectTypeExecutable:
                     symbol_addr += self.offset
-                self.functions[key] = symbol_addr
+
+                minimum_address = self.text_addr
+                if self.type != MachObjectTypeExecutable:
+                    minimum_address -= self.offset
+                if int(key, 16) >= minimum_address:
+
+                    self.functions[key] = symbol_addr
+                # self.functions[key] = symbol_addr
+
             count += 1
 
     def parse_functions64(self):
@@ -1233,13 +1274,14 @@ class MachObject:
         total_size = stubs.size
         each_size = stubs.reserved2
         count = 0
+        # stubs 函数
         while count < int(total_size / each_size):
             # 感觉这个 offset 是不是加错了啊
             index_begin = indirectsymoff + (count + offset) * 4  # indirect symbol table 里存的是索引
             index_bytes = self.bytes[index_begin:index_begin + 4]
             index = parse_int(index_bytes)  # 从 indirect symbol table 里获得索引之后，去 symbol table 里去取
 
-            nlist_begin = symoff + index * nlist_size
+            nlist_begin = symoff + index * nlist_size  # symbol table 里存的表项
             nlist_bytes = self.bytes[nlist_begin:nlist_begin + nlist_size]
             nlist = Nlist64.parse_from_bytes(nlist_bytes)
             stubs_key = hex(stubs.addr + count * each_size)
@@ -1261,7 +1303,7 @@ class MachObject:
             nlist_begin = symoff + count * nlist_size
             nlist_bytes = self.bytes[nlist_begin:nlist_begin + nlist_size]
             nlist = Nlist64.parse_from_bytes(nlist_bytes)
-            if nlist.n_sect == text_index:
+            if nlist.n_type == 0x0e and nlist.n_sect == text_index:
                 key = hex(nlist.n_value)
                 # self.function_names[key] = self.symbols[hex(
                 # symtab.stroff + nlist.n_strx)]

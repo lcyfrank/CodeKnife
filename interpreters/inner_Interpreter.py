@@ -48,10 +48,13 @@ class FloatRegister:
     # @is_memory_content.setter
     # def is_memory_content(self, value):
     #     pass
+InterpreterArch64 = 0
+InterpreterArch32 = 1
+
 
 class Interpreter:
 
-    def __init__(self, memory_provider=None, handle_strange_add=None, parameters=[]):
+    def __init__(self, memory_provider=None, handle_strange_add=None, arch=InterpreterArch64, parameters=[]):
         self.saved_state = {}
 
         self.gen_regs = [Register(i) for i in range(31)]
@@ -73,7 +76,8 @@ class Interpreter:
         self.handle_strange_add = handle_strange_add
 
         # 处理参数
-        if len(parameters) <= 4:
+        register_argument_count = 4 if arch == InterpreterArch32 else 8
+        if len(parameters) <= register_argument_count:
             int_count = 0
             float_count = 0
             for i in range(len(parameters)):
@@ -88,7 +92,7 @@ class Interpreter:
         else:
             int_count = 0
             float_count = 0
-            for i in range(4):
+            for i in range(register_argument_count):
                 argument_type, length, value = parameters[i]
                 if argument_type == 'int':
                     self.gen_regs[int_count].value = value
@@ -96,9 +100,9 @@ class Interpreter:
                 else:
                     self.float_regs[float_count].value = value
                     float_count += 1
-            # 超过 4 个参数存到栈里
+            # 超过 4/8 个参数存到栈里
             # 先不对齐了
-            for i in range(4, len(parameters)):
+            for i in range(register_argument_count, len(parameters)):
                 argument_type, length, value = parameters[i]
                 if argument_type == 'int':
                     self.memory[hex(self.sp.value)] = value
@@ -215,18 +219,21 @@ class Interpreter:
                   insn.id == ARM64_INS_ADR):
                 self.handle_adrp(insn)
             elif (insn.id == ARM64_INS_LDR or
-                  insn.id == ARM64_INS_LDRB or
-                  insn.id == ARM64_INS_LDRSB or
-                  insn.id == ARM64_INS_LDRH or
-                  insn.id == ARM64_INS_LDRSH or
-                  insn.id == ARM64_INS_LDRSW or
-                  insn.id == ARM64_INS_LDUR or
-                  insn.id == ARM64_INS_LDURB or
-                  insn.id == ARM64_INS_LDURSB or
-                  insn.id == ARM64_INS_LDURH or
-                  insn.id == ARM64_INS_LDURSH or
+                  insn.id == ARM64_INS_LDUR):
+                self.handle_load_register(insn, length=8)
+            elif (insn.id == ARM64_INS_LDRSW or
                   insn.id == ARM64_INS_LDURSW):
-                self.handle_load_register(insn)
+                self.handle_load_register(insn, length=4)
+            elif (insn.id == ARM64_INS_LDRH or
+                  insn.id == ARM64_INS_LDRSH or
+                  insn.id == ARM64_INS_LDURH or
+                  insn.id == ARM64_INS_LDURSH):
+                self.handle_load_register(insn, length=2)
+            elif (insn.id == ARM64_INS_LDRB or
+                  insn.id == ARM64_INS_LDRSB or
+                  insn.id == ARM64_INS_LDURB or
+                  insn.id == ARM64_INS_LDURSB):
+                self.handle_load_register(insn, length=1)
             elif (insn.id == ARM64_INS_LDP or
                   insn.id == ARM64_INS_LDPSW or
                   insn.id == ARM64_INS_LDNP):
@@ -406,30 +413,45 @@ class Interpreter:
         dest_register.value = source_value
         self.tracking[dest_register_name] = tracking
 
-    def handle_load_register(self, insn):
+    def handle_load_register(self, insn, length=8):
         tracking = []
         memory_operand = insn.operands[-1].mem
         memory_reg_name = insn.reg_name(memory_operand.base)
-        memory_reg = self.get_register(memory_reg_name)
-        memory_disp = memory_operand.disp
-        memory = memory_reg.value + memory_disp
+        if memory_reg_name is None:  # 当内存就是立即数的时候
+            memory_str = insn.op_str
+            memory_str_index = memory_str.find('#') + 1
+            memory_str = memory_str[memory_str_index:]
+            memory = int(memory_str, 16)
+        else:
+            memory_reg = self.get_register(memory_reg_name)
+            memory_disp = memory_operand.disp
+            memory = memory_reg.value + memory_disp
         tracking.append('[' + str(memory) + ']')
         for j in range(0, len(insn.operands) - 1):
             operand = insn.operands[j]
             if operand.type == ARM64_OP_REG:
                 reg_name = insn.reg_name(operand.reg)
                 register = self.get_register(reg_name)
-                if hex(memory + j * 8) in self.memory:
-                    memory_value = self.memory[hex(memory + j * 8)]
+                if hex(memory + j * length) in self.memory:
+
+                    memory_value = self.memory[hex(memory + j * length)]
+                    wrap = 0xff
+                    for i in range(1, length):
+                        wrap = (wrap << 8) + 0xff
+                    memory_value = memory_value & wrap
                     register.value = memory_value
                 else:
                     if self.memory_provider != None:
-                        memory_value = self.memory_provider(memory + j * 8)
+                        memory_value = self.memory_provider(memory + j * 4)
                     else:
                         memory_value = 0
-                    self.memory[hex(memory + j * 8)] = memory_value
+                    wrap = 0xff
+                    for i in range(1, length):
+                        wrap = (wrap << 8) + 0xff
+                    memory_value = memory_value & wrap
+                    self.memory[hex(memory + j * 4)] = memory_value
                     # register.is_memory_content = False
-                    register.value = self.memory[hex(memory + j * 8)]
+                    register.value = self.memory[hex(memory + j * 4)]
                 self.tracking[reg_name] = tracking
 
     def handle_load_pair(self, insn):

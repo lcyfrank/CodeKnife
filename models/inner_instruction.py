@@ -70,6 +70,7 @@ class MethodInstructions:
     def __init__(self, class_name, method_name):
         self.class_name = class_name
         self.method_name = method_name
+        self.return_type = []  # 存储当前方法的返回值，list 类型是因为可能会出现不同的执行路径产生不同的返回值
         self.entry_block = None
         self.all_blocks = {}  # <identity: block>  这个 Block 也不是 OC 的 Block
 
