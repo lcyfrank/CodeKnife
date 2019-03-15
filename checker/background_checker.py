@@ -1,32 +1,16 @@
 from models.macho_method_hub import *
 
 
-def _check_possible_hot_fix_for_method(method, method_hub, method_cache, recursive_set=set([])):
+def _check_enter_background_for_method(method, method_hub, method_cache, recursive_set=set([])):
 
     recursive_set.add(method)
-
-    k_js_context_init = 0
-    k_js_context_set = 0
-    k_js_context_evaluate = 0
-
-    js_context_init_methods = {
-        'alloc', 'init',
-        'initWithVirtualMachine:'
-    }
-
-    js_context_set_methods = {
-        'setObject:forKeyedSubscript:'
-    }
-
-    js_context_evaluate_methods = {
-        'evaluateScript:',
-        'evaluateScript:withSourceURL:'
-    }
 
     # 分析某个方法有没有调用剪切板相关方法
     entry_block = method.entry_block
     wait_for_check_block = [entry_block]
     analysed_block = set([])
+
+    called_apis = []
 
     while len(wait_for_check_block) > 0:  # 队列中还有
         block = wait_for_check_block[0]
@@ -45,29 +29,19 @@ def _check_possible_hot_fix_for_method(method, method_hub, method_cache, recursi
             called_method = method_hub.get_method_insn(class_name, method_name)
             if called_method is not None:
                 if class_method_cache is not None and method_name in class_method_cache:  # Already
-                    i, s, e = class_method_cache[method_name]
-                    k_js_context_init |= i
-                    k_js_context_set |= s
-                    k_js_context_evaluate |= e
+                    apis = class_method_cache[method_name]
+                    called_apis += apis
                 else:
                     if called_method in recursive_set:
                         continue
                     else:
-                        i, s, e = _check_possible_hot_fix_for_method(called_method, method_hub, method_cache, recursive_set.copy())
-                        k_js_context_init |= i
-                        k_js_context_set |= s
-                        k_js_context_evaluate |= e
+                        apis = _check_enter_background_for_method(called_method, method_hub, method_cache, recursive_set.copy())
+                        called_apis += apis
                         if class_name not in method_cache:
                             method_cache[class_name] = {}
-                        method_cache[class_name][method_name] = (i, s, e)
+                        method_cache[class_name][method_name] = apis
             else:
-                if class_name == 'JSContext':
-                    if method_name in js_context_init_methods:
-                        k_js_context_init = 1
-                    elif method_name in js_context_set_methods:
-                        k_js_context_set = 1
-                    elif method_name in js_context_evaluate_methods:
-                        k_js_context_evaluate = 1
+                called_apis.append((class_name, method_name))
 
         analysed_block.add(block.identify)
 
@@ -91,17 +65,21 @@ def _check_possible_hot_fix_for_method(method, method_hub, method_cache, recursi
                     if next_block.identify not in analysed_block:
                         wait_for_check_block.append(next_block)
 
-    return k_js_context_init, k_js_context_set, k_js_context_evaluate
+    return called_apis
 
 
-def check_possible_hot_fix(method_hub):
-    print('Start checking possible hot fix...')
+def check_enter_background(method_hub):
 
-    context_init = []
-    context_set = []
-    context_evaluate = []
+    print('Start checking enter background behaviour...')
+
+    enter_background_behaviours = {}
 
     method_cache = {}  # 使用 dict 存储结果 {class : {method_name: (0, 0, 0)}}
+
+    enter_background_methods = {
+        'applicationWillResignActive:',
+        'applicationDidEnterBackground:'
+    }
 
     for class_key in method_hub.method_insns:  # 这样遍历字典速度比较快
         # print('===================', class_key, '===================')
@@ -112,25 +90,20 @@ def check_possible_hot_fix(method_hub):
 
         class_methods = method_hub.method_insns[class_key]
         for method in class_methods:  # 遍历这个类的所有方法
+            if method.method_name not in enter_background_methods:  # 过滤掉不是进入后台的方法
+                continue
             if class_method_cache is not None and method.method_name in class_method_cache:  # 这个方法之前分析过了
                 continue
             else:
-                i, s, e = _check_possible_hot_fix_for_method(method, method_hub, method_cache)
+                behaviours = _check_enter_background_for_method(method, method_hub, method_cache)
+                enter_background_behaviours[(class_key, method.method_name)] = behaviours
                 if class_key not in method_cache:
                     method_cache[class_key] = {}
-                method_cache[class_key][method.method_name] = (i, s, e)
-                if i == 1:
-                    context_init.append((method.class_name, method.method_name))
-                if s == 1:
-                    context_set.append((method.class_name, method.method_name))
-                if e == 1:
-                    context_evaluate.append((method.class_name, method.method_name))
+                method_cache[class_key][method.method_name] = behaviours
 
     print('Checking finish!')
 
     result = {
-        'js_context_init': context_init,
-        'js_context_set': context_set,
-        'js_context_evaluate': context_evaluate
+        'background_behaviours': enter_background_behaviours
     }
     return result

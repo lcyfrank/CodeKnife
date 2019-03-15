@@ -135,7 +135,8 @@ def generate_cfg(method, info_provider, recursive=False, name_prefix=''):
                 cfg_blocks[-1].goto_block(name_prefix + block.jump_to_block)
                 if (cfg.get_block(name_prefix + block.jump_to_block) is None and
                     method.all_blocks[block.jump_to_block] not in wait_blocks_queue):
-                    wait_blocks_queue.append(method.all_blocks[block.jump_to_block])
+                    if block.jump_to_block in method.all_blocks:
+                        wait_blocks_queue.append(method.all_blocks[block.jump_to_block])
 
             if ((block.jump_condition and block.next_block is not None) or
                 (block.jump_to_block is None and block.next_block is not None)):

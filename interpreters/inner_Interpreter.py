@@ -54,7 +54,7 @@ InterpreterArch32 = 1
 
 class Interpreter:
 
-    def __init__(self, memory_provider=None, handle_strange_add=None, arch=InterpreterArch64, parameters=[]):
+    def __init__(self, memory_provider=None, store_notify=None, arch=InterpreterArch64, parameters=[]):
         self.saved_state = {}
 
         self.gen_regs = [Register(i) for i in range(31)]
@@ -73,7 +73,7 @@ class Interpreter:
         self.tracking = {}  # 记录寄存器和内存值的轨迹
 
         self.memory_provider = memory_provider
-        self.handle_strange_add = handle_strange_add
+        self.store_notify = store_notify
 
         # 处理参数
         register_argument_count = 4 if arch == InterpreterArch32 else 8
@@ -460,9 +460,15 @@ class Interpreter:
     def handle_store_register(self, insn):
         memory_operand = insn.operands[-1].mem
         memory_reg_name = insn.reg_name(memory_operand.base)
-        memory_reg = self.get_register(memory_reg_name)
-        memory_disp = memory_operand.disp
-        memory = memory_reg.value + memory_disp
+        if memory_reg_name is None:
+            memory_str = insn.op_str
+            memory_str_index = memory_str.find('#') + 1
+            memory_str = memory_str[memory_str_index:]
+            memory = int(memory_str, 16)
+        else:
+            memory_reg = self.get_register(memory_reg_name)
+            memory_disp = memory_operand.disp
+            memory = memory_reg.value + memory_disp
         for j in range(0, len(insn.operands) - 1):
             operand = insn.operands[j]
             if operand.type == ARM64_OP_REG:
@@ -470,6 +476,8 @@ class Interpreter:
                 register = self.get_register(reg_name)
                 self.memory[hex(memory + j * 8)] = register.value
                 self.tracking['[' + str(memory + j * 8) + ']'] = [reg_name]
+                if self.store_notify is not None:
+                    self.store_notify(hex(memory + j * 8), register.value)
 
     def handle_store_pair(self, insn):
         self.handle_store_register(insn)
@@ -488,8 +496,6 @@ class Interpreter:
                     self.tracking[reg_name] = [reg_name_2]
                     register = self.get_register(reg_name)
                     register.value = register_2.value
-                if self.handle_strange_add:
-                    self.handle_strange_add(register_2.value)
                 return
 
         result = 0

@@ -8,6 +8,10 @@ from cfg_generator import *
 from utils import sorted_list_for_hex_string
 from tqdm import tqdm
 from checker.paste_checker import *
+from checker.storage_checker import *
+from checker.keychain_checker import *
+from checker.background_checker import *
+from checker.hotfix_checker import *
 
 # TEST_PATH = './Test'
 # TEST_PATH = './Target/HotPatchDemo'
@@ -22,6 +26,7 @@ FA_SIZE_KEY = 'size'
 FA_ALIGN_KEY = 'align'
 
 _g_return_types = []
+_g_current_context = ()
 
 methods_hubs = []  # [method_hub]
 
@@ -107,8 +112,6 @@ def _sub_slice_handle(trunk_id, arch, mode, sub_machine_code, part_base_addr, sl
 
 def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_address, method_hub=None):
     # each_trunk = 0x1000
-    # progress_bar = tqdm(total=len(slice_address))
-
     # if len(machine_code) > each_trunk:
     #     print('sub process')
     #
@@ -148,11 +151,15 @@ def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_addr
 
     fm_count = 0
 
+    progress_bar = tqdm(total=len(machine_code))
+
     while last_addr - base_addr + 4 < len(machine_code):
         last_addr += 4
+        progress_bar.update(4)
         temp_machine_code = machine_code[last_addr - base_addr:]
         for insn in model.disasm(temp_machine_code, last_addr):
             last_addr = insn.address
+            progress_bar.update(4)
             # print(hex(last_addr))
             if last_addr < slice_addr:
                 current_function.append(insn)
@@ -162,7 +169,6 @@ def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_addr
                     method_hub.insert_cs_insn(current_function)
                     current_function = []
                 fm_count += 1
-                # progress_bar.update(1)
                 slice_addr = int(slice_address[fm_count], 16)
                 current_function.append(insn)
             else:  # >
@@ -175,13 +181,15 @@ def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_addr
                         method_hub.insert_cs_insn(current_function)
                         current_function = []
                     fm_count += 1
-                    # progress_bar.update(1)
                     slice_addr = int(slice_address[fm_count], 16)
                     current_function.append(insn)
                 else:
                     current_function.append(insn)
-    all_functions.append(current_function)
-    method_hub.insert_cs_insn(current_function)
+
+    progress_bar.close()
+    if len(current_function) > 0:
+        all_functions.append(current_function)
+        method_hub.insert_cs_insn(current_function)
     return all_functions
 
 
@@ -283,10 +291,234 @@ def _analyse_reachable_of_basic_blocks(basic_blocks_keys, basic_blocks, method_r
                     j_address not in reachable):
                     reachable.add(j_address)
                     # 找那个 block
-                    next_block = basic_blocks[hex(j_address)]
-                    wait_to_analyse.append(next_block)
-                    block_index_array.append(basic_blocks_keys.index(hex(j_address)))  # 这里有个查找
+                    if hex(j_address) in basic_blocks:
+                        next_block = basic_blocks[hex(j_address)]
+                        wait_to_analyse.append(next_block)
+                        block_index_array.append(basic_blocks_keys.index(hex(j_address)))  # 这里有个查找
     return reachable
+
+
+def get_obj_name(mach_info, value, class_name, class_data):
+    if class_name == 'PasteBoardManager':
+        print('dskjfhjkdshfjkshfjkshdjkf', hex(value))
+
+    if value == SELF_POINTER:  # 自己的方法
+        return class_name
+    if value <= RETURN_VALUE:  # 某个方法的返回值
+        return_index = RETURN_VALUE - value
+        if return_index < len(_g_return_types):
+            return _g_return_types[return_index]
+        return 'id'
+    if value < SELF_POINTER:  # 调用的是某个参数的方法
+        return 'PARAMETERS_' + str(SELF_POINTER - value - 1)
+    if value < 0:  # 调用的是父类的方法
+        if class_data is None:
+            return class_name
+        else:
+            return class_data.super
+    obj_name_key = hex(value)
+
+    # 其他类
+    if obj_name_key in mach_info.statics_class:  # 静态变量
+        obj_name = mach_info.statics_class[obj_name_key]
+        return obj_name
+    if obj_name_key in mach_info.symbols:  # 直接可以从符号表中获得信息
+        obj_name = mach_info.symbols[obj_name_key]
+        obj_name_index = obj_name.find('$')
+        obj_name = obj_name[obj_name_index + 2:]
+        return obj_name
+    if obj_name_key in mach_info.class_datas:  # 调用的是某个类
+        obj_data = mach_info.class_datas[obj_name_key]
+        return obj_data.name
+
+    if class_data is not None and 1 <= value // 0x8 <= len(class_data.ivars):  # 类中的变量
+        ivar_index = value // 0x8 - 1
+        ivar = class_data.ivars[ivar_index]
+        # obj_name = class_name + "->" + ivar.name
+        return ivar._type
+
+    if hex(value) in mach_info.cfstrings:  # 某个字符串的方法
+        return "NSString"
+    if hex(value) in mach_info.statics:  # 静态变量
+        static_name = mach_info.statics[hex(value)]
+        return mach_info.symbols[hex(static_name)]
+
+    print("Some error happens during analysis in get value in register 0 (Instance) %d" % value)
+    return 'id'
+
+
+def handle_method_call(mach_info, class_data, inter, method_hub, instruction, recurive_stack=None, method=True, function_name=None):
+
+    global _g_current_context
+
+    if recurive_stack is not None:
+        r_stack = recurive_stack.copy()
+    else:
+        r_stack = set([])
+
+    if method:
+        if class_data is None:  # 分类
+            class_name = '$Function'
+        else:
+            class_name = class_data.name
+        reg0_value = inter.gen_regs[0].value
+        reg1_value = inter.gen_regs[1].value
+        caller_name = get_obj_name(mach_info, reg0_value, class_name, class_data)
+        try:
+            meth_name = mach_info.symbols[hex(reg1_value)]
+        except Exception as e:
+            print("Some error happens during analysis in get value in register 1 (Method)")
+            print(str(e))
+            return None
+        if meth_name == 'setString:':
+            print('daslfjdsklfjsdklafjlkdsjf', caller_name, class_name, reg0_value)
+            print(_g_return_types)
+    else:
+        caller_name = '$Function'
+        meth_name = function_name
+
+    # 处理参数中的 Block
+    block_arguments, call_it = mach_info.contain_block_arguments(caller_name, meth_name)
+    if len(block_arguments) > 0:
+        for index in block_arguments:
+            block_value = inter.gen_regs[index].value
+            if hex(block_value) in mach_info.block_methods:  # Global block
+                block_data = mach_info.block_methods[hex(block_value)]
+                _, block_name = mach_info.methods[hex(block_data.invoke)]
+                instruction.block_callback(block_name)
+                # 调用 Block
+                if call_it:
+                    block_insn = method_hub.get_method_insn('$Block', block_name)
+                    if block_insn is None:
+                        if ('$Block', block_name) not in r_stack:
+                            method_address = mach_info.get_method_address('$Block', block_name)
+                            if method_address is not None:
+                                block_instruction = method_hub.get_cs_insn(hex(method_address))
+                                if block_instruction is not None:
+                                    _analyse_method(block_instruction, mach_info, method_hub, recursive_stack=r_stack)
+            else:  # Stack block
+                dylib_name = mach_info.symbols[hex(inter.memory[hex(block_value)])]
+                if dylib_name == '__NSConcreteStackBlock':
+                    type = BlockMethodTypeStack
+                    block_data = BlockMethodData(type)
+                    block_data.invoke = inter.memory[hex(block_value + (16 if mach_info.is_64_bit else 12))]
+                    mach_info.methods[hex(block_data.invoke)] = '$Block', hex(block_data.invoke)
+                    instruction.block_callback(hex(block_data.invoke))
+
+                    if call_it:
+                        block_insn = method_hub.get_method_insn('$Block', hex(block_data.invoke))
+                        if block_insn is None:
+                            if ('$Block', hex(block_data.invoke)) not in r_stack:
+                                method_address = mach_info.get_method_address('$Block', hex(block_data.invoke))
+                                if method_address is not None:
+                                    block_instruction = method_hub.get_cs_insn(hex(method_address))
+                                    if block_instruction is not None:
+                                        _analyse_method(block_instruction, mach_info, method_hub, recursive_stack=r_stack)
+
+    # 处理返回值
+    # 递归调用方法
+    method_insn = method_hub.get_method_insn(caller_name, meth_name)
+    if method_insn is not None:  # 方法指令不是空
+        if len(method_insn.return_type) > 0:
+            return_type = method_insn.return_type[0]
+        else:
+            return_type = 'None'
+    else:
+        if (caller_name, meth_name) in r_stack:
+            return_type = 'id'
+        else:
+            # 该方法在当前二进制文件中
+            method_address = mach_info.get_method_address(caller_name, meth_name)
+            if method_address is not None:
+                goto_instruction = method_hub.get_cs_insn(hex(method_address))
+                if goto_instruction is not None:
+                    method_insn = _analyse_method(goto_instruction, mach_info, method_hub, recursive_stack=r_stack)
+                    if len(method_insn.return_type) > 0:
+                        return_type = method_insn.return_type[0]
+                    else:
+                        return_type = 'None'
+                else:
+                    arch, mode = _g_current_context
+
+                    slice_address = list(mach_info.methods.keys())
+                    slice_address += list(mach_info.functions.keys())
+                    goto_instruction = _disasm_specified_function(arch, mode, mach_info.text, method_address,
+                                                                  mach_info.text_addr, slice_address)
+                    method_insn = _analyse_method(goto_instruction, mach_info, method_hub, recursive_stack=r_stack)
+                    if len(method_insn.return_type) > 0:
+                        return_type = method_insn.return_type[0]
+                    else:
+                        return_type = 'None'
+            else:
+                # 该方法在动态库中
+                dylib_key = '_OBJC_CLASS_$_' + caller_name
+                if dylib_key in mach_info.dylib_frameworks_pair:
+                    dylib_mach_info = mach_info.get_dylib_frameworks(
+                        mach_info.dylib_frameworks_pair[dylib_key])
+                    if dylib_mach_info is not None:
+                        dylib_slice_address = list(dylib_mach_info.methods.keys())
+                        dylib_slice_address += list(dylib_mach_info.functions.keys())
+                        # 从动态库中找到该方法
+                        address = dylib_mach_info.get_method_address(caller_name, meth_name)
+                        if address is not None:
+                            arch, mode = _g_current_context
+                            dylib_method = _disasm_specified_function(arch, mode, dylib_mach_info.text, address,
+                                                                      dylib_mach_info.text_addr, dylib_slice_address)
+                            dylib_method_instruction = _analyse_method(dylib_method, dylib_mach_info,
+                                                                       method_hub=method_hub, recursive_stack=r_stack)
+                            if len(dylib_method_instruction.return_type) > 0:
+                                return_type = dylib_method_instruction.return_type[0]
+                            else:
+                                return_type = 'None'
+                        else:
+                            return_type = 'None'
+                    else:
+                        if method:
+                            return_type = mach_info.get_return_type_from_method(caller_name, meth_name)
+                        else:
+                            return_type = mach_info.get_return_type_from_function(meth_name)
+
+                else:
+                    if method:
+                        return_type = mach_info.get_return_type_from_method(caller_name, meth_name)
+                    else:
+                        return_type = mach_info.get_return_type_from_function(meth_name)
+
+    # 返回值
+    if return_type == '$SELF':
+        return_type = caller_name
+
+    if not return_type == 'None':
+        _g_return_types.append(return_type)
+        inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
+
+    instruction.goto(caller_name, meth_name)  # ！！！！！！！！！！！！！
+
+
+def handle_super_method(mach_info, class_data, inter, instruction):
+    reg1_value = inter.gen_regs[1].value
+    meth_name = mach_info.symbols[hex(reg1_value)]  # 解析出方法名
+
+    # 处理父类调用的返回值
+    # ！！！！！！！！！！！！！
+    if class_data is None:  # None 的时候通常是分类
+        class_name = 'id'
+        return_type = 'id'
+        # pass
+        # return_type = mach_info.get_return_type_from_method(class_name, meth_name)
+        # instruction.goto(class_name, meth_name)
+    else:
+        class_name = class_data.name
+        return_type = mach_info.get_return_type_from_method(class_data.super, meth_name)
+
+    if return_type == '$SELF':
+        return_type = class_name
+
+    if not return_type == 'None':  # 返回值不为空
+        _g_return_types.append(return_type)
+        inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
+
+    instruction.goto(class_name, meth_name)
 
 
 def _analyse_basic_block(block_instruction, identify, mach_info, class_data, inter, add_range, method_hub=None, recursive_stack=set([])):
@@ -295,6 +527,7 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, int
         class_name = '$Function'
     else:
         class_name = class_data.name
+
     basic_block = MethodBasicBlockInstructions(identify)
     for i in range(len(block_instruction)):
         cs_insn = block_instruction[i]
@@ -307,244 +540,35 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, int
 
         if cs_insn.id == ARM64_INS_BL or cs_insn.id == ARM64_INS_BLR:  # 函数调用
             operand = cs_insn.operands[0]  # 获得调用的值
-            if operand.type == ARM64_OP_IMM:
-                try:
-                    _function = mach_info.functions[hex(operand.imm)]  # 取得调用的函数
-                except Exception as e:
-                    continue
+            if operand.type != ARM64_OP_IMM:
+                continue
+            try:
+                _function = mach_info.functions[hex(operand.imm)]  # 取得调用的函数
+            except Exception as e:
+                continue
 
-                # 解析出函数名
-                function_name = mach_info.symbols[hex(_function)]
+            # 解析出函数名
+            function_name = mach_info.symbols[hex(_function)]
 
-                if function_name == "_objc_msgSendSuper2":  # 调用父类方法
-                    reg1_value = inter.gen_regs[1].value
-                    meth_name = mach_info.symbols[hex(reg1_value)]  # 解析出方法名
+            if function_name == "_objc_msgSendSuper2":  # 调用父类方法
+                handle_super_method(mach_info, class_data, inter, instruction)
+                basic_block.insert_instruction(instruction)
 
-                    # 处理父类调用的返回值
-                    # ！！！！！！！！！！！！！
-                    if class_data is None:  # None 的时候通常是分类
-                        return_type = mach_info.get_return_type_from_method(class_name, meth_name)
-                        instruction.goto(class_name, meth_name)
-                    else:
-                        return_type = mach_info.get_return_type_from_method(class_data.super, meth_name)
-                        instruction.goto(class_data.super, meth_name)  # 在 instruction 中可以增加参数，确保后续解析
+            elif function_name == "_objc_storeStrong":  # 一些特殊方法
+                reg0_value = inter.gen_regs[0].value
+                reg1_value = inter.gen_regs[1].value
+                inter.modify_memory(reg0_value, reg1_value)
 
-                    if return_type == '$SELF':
-                        return_type = class_name
-                    if not return_type == 'None':  # 返回值不为空
-                        _g_return_types.append(return_type)
-                        inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
-                    # 以上处理返回值
-
-                    # ！！！！！！！！！！！！！
+            elif function_name == "_objc_msgSend":  # 调用方法
+                # 处理普通方法调用
+                handle_method_call(mach_info, class_data, inter, method_hub, instruction, recurive_stack=r_stack)
+                basic_block.insert_instruction(instruction)
+            else:
+                handle_method_call(mach_info, class_data, inter, method_hub, instruction, recursive_stack, False, function_name)
+                filtered_functions = {'_objc_msgSendSuper2', '_objc_storeStrong', '_objc_msgSend'}
+                if function_name not in filtered_functions:
                     basic_block.insert_instruction(instruction)
 
-                elif function_name == "_objc_storeStrong":  # 一些特殊方法
-                    reg0_value = inter.gen_regs[0].value
-                    reg1_value = inter.gen_regs[1].value
-                    inter.modify_memory(reg0_value, reg1_value)
-
-                elif function_name == "_objc_msgSend":  # 调用方法
-                    # 处理普通方法调用
-                    reg0_value = inter.gen_regs[0].value
-                    # if cs_insn.address == 0x10002e8c8:
-                    #     print(hex(reg0_value))
-                    reg1_value = inter.gen_regs[1].value
-                    if reg0_value == SELF_POINTER:  # [self ...]
-                        obj_name = class_name
-                    elif reg0_value <= RETURN_VALUE:  # [RETURN_VALUE ...]
-                        return_index = RETURN_VALUE - reg0_value
-                        if return_index < len(_g_return_types):
-                            obj_name = _g_return_types[return_index]
-                        else:
-                            obj_name = 'id'
-                    elif reg0_value < SELF_POINTER:  # [PARAMETER ...]
-                        obj_name = "PARAMETERS_" + str(SELF_POINTER - reg0_value - 1)
-                    elif reg0_value < 0:  # [super ...]
-                        if class_data is None:
-                            obj_name = class_name
-                        else:
-                            obj_name = class_data.super
-                    else:
-                        # obj_name = 'id'
-                        obj_name_key = hex(reg0_value)
-                        if obj_name_key in mach_info.symbols:  # Outter classes
-                            obj_name = mach_info.symbols[obj_name_key]
-                            obj_name_index = obj_name.find('$')
-                            obj_name = obj_name[obj_name_index + 2:]
-                        elif obj_name_key in mach_info.class_datas:  # Inner classes
-                            obj_data = mach_info.class_datas[obj_name_key]
-                            obj_name = obj_data.name
-                        else:
-                            # if class_data is not None and hex(reg0_value) in mach_info.ivar_refs:
-                            #     ivar = class_data.ivars[mach_info.ivar_refs[hex(reg0_value)]]
-                            #     obj_name = class_name + "->" + ivar.name
-                            # el
-                            if class_data is not None and 1 <= reg0_value // 0x8 <= len(class_data.ivars):  # guess ivars
-                                ivar_index = reg0_value // 0x8 - 1
-                                ivar = class_data.ivars[ivar_index]
-                                obj_name = class_name + "->" + ivar.name
-                            elif hex(reg0_value) in mach_info.cfstrings:
-                                obj_name = "NSString"
-                            else:  # static vars
-                                try:
-                                    static_name = mach_info.statics[hex(reg0_value)]
-                                    obj_name = mach_info.symbols[hex(static_name)]
-                                except Exception as e:
-                                    print("Some error happens during analysis in get value in register 0 (Instance)")
-                                    print(str(e))
-                                    print("Current instruction address is %s" % hex(cs_insn.address))
-                                    obj_name = 'id'
-
-                    try:
-                        meth_name = mach_info.symbols[hex(reg1_value)]
-                    except Exception as e:
-                        print("Some error happens during analysis in get value in register 1 (Method)")
-                        print(str(e))
-                        print("Current instruction address is %s" % hex(cs_insn.address))
-                        break
-
-                    block_arguments = mach_info.contain_block_arguments(obj_name, meth_name)
-                    if len(block_arguments) > 0:  # 参数中有 Block
-                        for index in block_arguments:
-                            block_value = inter.gen_regs[index].value
-                            if hex(block_value) in mach_info.block_methods:
-                                block_data = mach_info.block_methods[hex(block_value)]
-                                _, block_name = mach_info.methods[hex(block_data.invoke)]
-                                instruction.block_callback(block_name)
-                            else:
-                                # print(hex(block_value))
-                                # inter.current_state()
-                                dylib_name = mach_info.symbols[hex(inter.memory[hex(block_value)])]
-                                if dylib_name == '__NSConcreteStackBlock':
-                                    type = BlockMethodTypeStack
-                                    block_data = BlockMethodData(type)
-                                    block_data.invoke = inter.memory[hex(block_value + (16 if mach_info.is_64_bit else 12))]
-                                    mach_info.methods[hex(block_data.invoke)] = '$Block', hex(block_data.invoke)
-                                    instruction.block_callback(hex(block_data.invoke))
-                    # ！！！！！！！！！！！！！
-                    # 处理返回值
-
-                    method_insn = method_hub.get_method_insn(obj_name, meth_name)
-                    if method_insn is not None:  # 方法指令不是空
-                        if len(method_insn.return_type) > 0:
-                            return_type = method_insn.return_type[0]
-                        else:
-                            return_type = 'None'
-                    else:
-
-                        if (obj_name, meth_name) in r_stack:
-                            return_type = 'id'
-                        else:
-                            method_address = mach_info.get_method_address(obj_name, meth_name)
-                            if method_address is not None:
-                                goto_instruction = method_hub.get_cs_insn(hex(method_address))
-                                if goto_instruction is not None:
-                                    method_insn = _analyse_method(goto_instruction, mach_info, method_hub, recursive_stack=r_stack)
-                                    if len(method_insn.return_type) > 0:
-                                        return_type = method_insn.return_type[0]
-                                    else:
-                                        return_type = 'None'
-                                else:
-                                    arch = CS_ARCH_ALL
-                                    mode = CS_MODE_32
-                                    if mach_info.cpu_type == CPU_TYPE_ARM:
-                                        arch = CS_ARCH_ARM
-                                        mode = CS_MODE_THUMB
-                                    elif mach_info.cpu_type == CPU_TYPE_ARM64:
-                                        arch = CS_ARCH_ARM64
-                                        mode = CS_MODE_ARM
-                                    elif mach_info.cpu_type == CPU_TYPE_X86_64:
-                                        arch = CS_ARCH_X86
-                                        mode = CS_MODE_32 if not mach_info.is_64_bit else CS_MODE_64
-
-                                    slice_address = list(mach_info.methods.keys())
-                                    slice_address += list(mach_info.functions.keys())
-                                    goto_instruction = _disasm_specified_function(arch, mode, mach_info.text, method_address,
-                                                                                  mach_info.text_addr, slice_address)
-                                    method_insn = _analyse_method(goto_instruction, mach_info, method_hub, recursive_stack=r_stack)
-                                    if len(method_insn.return_type) > 0:
-                                        return_type = method_insn.return_type[0]
-                                    else:
-                                        return_type = 'None'
-                            else:
-                                # 在动态库中找方法
-                                dylib_key = '_OBJC_CLASS_$_' + obj_name
-                                if dylib_key in mach_info.dylib_frameworks_pair:
-                                    dylib_mach_info = mach_info.get_dylib_frameworks(
-                                        mach_info.dylib_frameworks_pair[dylib_key])
-                                    if dylib_mach_info is not None:
-                                        dylib_slice_address = list(dylib_mach_info.methods.keys())
-                                        dylib_slice_address += list(dylib_mach_info.functions.keys())
-                                        address = dylib_mach_info.get_method_address(obj_name, meth_name)
-                                        if address is not None:
-                                            arch = CS_ARCH_ALL
-                                            mode = CS_MODE_32
-                                            if dylib_mach_info.cpu_type == CPU_TYPE_ARM:
-                                                arch = CS_ARCH_ARM
-                                                mode = CS_MODE_THUMB
-                                            elif dylib_mach_info.cpu_type == CPU_TYPE_ARM64:
-                                                arch = CS_ARCH_ARM64
-                                                mode = CS_MODE_ARM
-                                            elif dylib_mach_info.cpu_type == CPU_TYPE_X86_64:
-                                                arch = CS_ARCH_X86
-                                                mode = CS_MODE_32 if not dylib_mach_info.is_64_bit else CS_MODE_64
-                                            dylib_method = _disasm_specified_function(arch, mode, dylib_mach_info.text, address,
-                                                                                      dylib_mach_info.text_addr, dylib_slice_address)
-                                            dylib_method_instruction = _analyse_method(dylib_method, dylib_mach_info, method_hub=method_hub, recursive_stack=r_stack)
-                                            if len(dylib_method_instruction.return_type) > 0:
-                                                return_type = dylib_method_instruction.return_type[0]
-                                            else:
-                                                return_type = 'None'
-                                        else:
-                                            return_type = 'None'
-                                    else:
-                                        return_type = mach_info.get_return_type_from_method(obj_name, meth_name)
-                                else:
-                                    return_type = mach_info.get_return_type_from_method(obj_name, meth_name)
-
-                            # 动态库
-                    if return_type == '$SELF':
-                        return_type = obj_name
-                    if not return_type == 'None':
-                        _g_return_types.append(return_type)
-                        inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
-                    # 以上处理返回值
-
-                    instruction.goto(obj_name, meth_name)  # ！！！！！！！！！！！！！
-                    basic_block.insert_instruction(instruction)
-                else:
-                    instruction.goto("$Function", function_name)
-
-                    block_arguments = mach_info.contain_block_arguments('$Function', function_name)
-                    if len(block_arguments) > 0:  # 如果参数中有 Block
-                        for index in block_arguments:
-                            block_value = inter.gen_regs[index].value
-                            if hex(block_value) in mach_info.block_methods:
-                                block_data = mach_info.block_methods[hex(block_value)]
-                                _, block_name = mach_info.methods[hex(block_data.invoke)]
-                                instruction.block_callback(block_name)
-                            else:
-                                # print(inter.saved_state)
-                                # inter.current_state()
-                                # print(hex(cs_insn.address))
-                                # print(inter.gen_regs[index].value)
-                                # inter.current_state()
-                                dylib_name = mach_info.symbols[hex(inter.memory[hex(block_value)])]
-                                if dylib_name == '__NSConcreteStackBlock':
-                                    type = BlockMethodTypeStack
-                                    block_data = BlockMethodData(type)
-                                    block_data.invoke = inter.memory[hex(block_value + (16 if mach_info.is_64_bit else 12))]
-                                    mach_info.methods[hex(block_data.invoke)] = '$Block', hex(block_data.invoke)
-                                    instruction.block_callback(hex(block_data.invoke))
-                    # ！！！！！！！！！！！！！
-                    # 处理返回值
-                    return_type = mach_info.get_return_type_from_function(function_name)
-                    if not return_type == 'void':
-                        _g_return_types.append(return_type)
-                        inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
-                    # 以上处理返回值
-                    basic_block.insert_instruction(instruction)
         elif cs_insn.id == ARM64_INS_B:
             address_op = cs_insn.operands[-1]
             if len(cs_insn.mnemonic) == 1:  # 无条件跳转
@@ -588,6 +612,12 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
         except Exception as _:
             return 0
 
+    def store_notify(memory, value):
+        if memory in mach_info.statics:
+            type_name = get_obj_name(mach_info, value, class_name, class_data)
+            static_name = mach_info.statics[memory]
+            mach_info.statics_class[hex(static_name)] = type_name
+
     method_address_key = hex(method[0].address)
     if method_address_key in mach_info.methods:  # pass the functions
         class_name, method_name = mach_info.methods[method_address_key]
@@ -629,7 +659,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
     if method_instructions is not None:
         return method_instructions
     # 构造一个解释器
-    inter = Interpreter(memory_provider, parameters=arguments)
+    inter = Interpreter(memory_provider, store_notify=store_notify, parameters=arguments)
     print('Current analyse <%s: %s>' % (class_name, method_name))
     r_stack.add((class_name, method_name))
 
@@ -652,8 +682,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
     basic_block_key = basic_blocks_keys[0]
     blocks_instructions_queue.append(basic_blocks_instructions[basic_block_key])  # 将入口块入队列
 
-    blocks_instructions_index_queue = []
-    blocks_instructions_index_queue.append(0)
+    blocks_instructions_index_queue = [0]
 
     wait_for_follow_queue = []  # 等待分析后续基本块的当前基本块队列
     wait_for_follow_count_queue = []  # 等待分析后续基本块的数量队列
@@ -683,20 +712,6 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
             # 恢复寄存器状态
             inter.restore_state(wait_for_follow.identify)
             wait_for_follow_count -= 1
-
-            # 解析跳转条件
-            # if wait_for_follow.jump_condition is not None:
-            #     jump_condition = wait_for_follow.jump_condition.split(' ')
-            #     if wait_for_follow.jump_to_block == hex(block_instructions[0].address):  # 跳转过去的
-            #         if len(jump_condition) == 1:  # b.le 等等
-            #             # print(jump_condition)
-            #             pass
-            #         else:  # cbz 等等
-            #             # print(jump_condition)
-            #             pass
-            #         pass
-            #     else:  # 需要与跳转条件不一样
-            #         pass
 
             if wait_for_follow_count == 0:
                 wait_for_follow = None
@@ -740,56 +755,17 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
 
         # 如果入口块是空的，添加入口块
         if method_instructions.entry_block is None:
-
             method_instructions.entry_block = block
-
-    after = datetime.now()
-    # print('analyse time', (after - before).microseconds)
-    before = datetime.now()
 
     return_types = list(set(return_types))
     return_types_str = []
+
     for rt in return_types:
-        if rt == SELF_POINTER:
-            return_types_str.append(class_name)
-        elif rt <= RETURN_VALUE:
-            return_index = RETURN_VALUE - rt
-            if return_index < len(_g_return_types):
-                return_types_str.append(_g_return_types[RETURN_VALUE - rt])
-            else:
-                return_types_str.append('id')
-        elif rt < SELF_POINTER:
-            return_types_str.append('PARAMETERS_' + str(SELF_POINTER - rt - 1))
-        elif rt < 0:
-            if class_data is None:
-                return_types_str.append(class_name)
-            else:
-                return_types_str.append(class_data.super)
-        else:
-            rt_name_key = hex(rt)
-            if rt_name_key in mach_info.symbols:
-                rt_name = mach_info.symbols[rt_name_key]
-                rt_name_index = rt_name.find('$')
-                rt_name = rt_name[rt_name_index + 2:]
-                return_types_str.append(rt_name)
-            elif rt_name_key in mach_info.class_datas:
-                rt_data = mach_info.class_datas[rt_name_key]
-                rt_name = rt_data.name
-                return_types_str.append(rt_name)
-            else:
-                if class_data != None and 1 <= rt // 0x8 <= len(class_data.ivars):
-                    ivar_index = rt // 0x8 - 1
-                    ivar = class_data.ivars[ivar_index]
-                    return_types_str.append(ivar._type)
-                elif rt_name_key in mach_info.cfstrings:
-                    return_types_str.append('NSString')
-                else:
-                    if rt_name_key in mach_info.statics:
-                        static_name = mach_info.statics[rt_name_key]
-                        return_types_str.append(mach_info.symbols[hex(static_name)])
+
+        return_type = get_obj_name(mach_info, rt, class_name, class_data)
+        return_types_str.append(return_type)
     method_instructions.return_type = return_types_str
     method_hub.insert_method_insn(method_instructions)
-
     return method_instructions
 
 
@@ -801,6 +777,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
 
 def static_analysis(binary_file, arch=0):
 
+    global _g_current_context
     # 用来解析动态库
     def macho_file_provider(file_path):
         if '/' in binary_file:
@@ -811,6 +788,7 @@ def static_analysis(binary_file, arch=0):
             return open(file_path, 'rb')
         else:
             return open(file_path, 'rb')
+
 
     mach_o_file = open(binary_file, 'rb')
 
@@ -837,39 +815,12 @@ def static_analysis(binary_file, arch=0):
         elif mach_info.cpu_type == CPU_TYPE_X86_64:
             arch = CS_ARCH_X86
             mode = CS_MODE_32 if not mach_info.is_64_bit else CS_MODE_64
+        _g_current_context = (arch, mode)
 
         slice_addresses = list(mach_info.methods.keys())
         slice_addresses += list(mach_info.functions.keys())
 
         sorted_slice_addresses = sorted_list_for_hex_string(slice_addresses)
-        # address = mach_info.get_method_address('ThreadQueue', 'RunWithTarget:selector:object:')
-
-            # if method_instruction[0].address == 0x10166b9e0:
-            #     print(mach_info.methods[hex(method_instruction[0].address)])
-            # if hex(method_instruction[0].address) in mach_info.methods:
-            #     print(mach_info.methods[hex(method_instruction[0].address)])
-            # else:
-            #     print(mach_info.functions[hex(method_instruction[0].address)])
-        # print('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-        # print(sorted_list_for_hex_string(slice_addresses))
-        # print('bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
-
-        # print(len(mach_info.methods.keys()))
-
-        # address = mach_info.get_method_address('PDDCrashManager', 'extractDataFromCrashReport:keyword:')
-        # address = mach_info.get_method_address('PDDCrashManager', 'setup')
-        # address = mach_info.get_method_address('KSCrashInstallationConsole', 'sharedInstance')
-        # address = mach_info.get_method_address('LuaViewController', 'attachSceneIfPossible')
-        # address = mach_info.get_method_address('LuaViewController', 'viewDidLoad')
-        # address = mach_info.get_method_address('AppDelegate', 'application:didFinishLaunchingWithOptions:')
-        # address = mach_info.get_method_address('KSCrashReportFilterPipeline', 'initWithFiltersArray:')
-        # address = mach_info.get_method_address('ABKCategoryManageViewController', 'deleteButtonClick:')
-        # address = mach_info.get_method_address('ABKWelcomeViewController', 'viewDidLoad')
-        # address = mach_info.get_method_address('PDDNetworkInterceptor', 'sharedInstance')
-        # address = mach_info.get_method_address('ViewController', 'viewDidLoad')
-        # address = mach_info.get_method_address('WBMAppDelegate', 'application:didFinishLaunchingWithOptions:')
-        # address = mach_info.get_method_address('WBMModuleManager', 'shareManager')
-        # address = mach_info.get_method_address('ABKUserInfo', 'init')
 
         def cfg_provider(class_name, imp_name):
             # print(class_name, imp_name)
@@ -910,39 +861,33 @@ def static_analysis(binary_file, arch=0):
             # print(instruction.entry_block)
         # instruction.describe()
 
-        pasted_method = check_has_paste_board(method_hub)
-        read_paste_method = pasted_method['read_paste_board']
-        write_paste_method = pasted_method['write_paste_board']
-        print('Follow methods has read the content from paste board')
-        for cls, method in read_paste_method:
-            print('\t', cls, method)
+        # pasted_method = check_has_paste_board(method_hub)
+        # storage_method = check_storage_type(method_hub)
+        # background_behaviours = check_enter_background(method_hub)
+        # possible_hot_fix_method = check_possible_hot_fix(method_hub)
+        keychain_method = check_access_keychain(method_hub)
 
-        print('')
-        print('Follow methods has write the content to paste board')
-        for cls, method in write_paste_method:
-            print('\t', cls, method)
+        # read_paste_method = pasted_method['read_paste_board']
+        # write_paste_method = pasted_method['write_paste_board']
+        # print('Follow methods has read the content from paste board')
+        # for cls, method in read_paste_method:
+        #     print('\t', cls, method)
+        #
+        # print('')
+        # print('Follow methods has write the content to paste board')
+        # for cls, method in write_paste_method:
+        #     print('\t', cls, method)
+        #
+        # print(pasted_method)
+        #
+        # print(storage_method)
+        #
+        # print(background_behaviours)
+        #
+        # print(possible_hot_fix_method)
+        #
+        print(keychain_method)
 
-        # check_has_paste_board(method_hub)
-        # address = mach_info.get_method_address('MessagesBubblesSizeCalculator', 'messageBubbleSizeForMessageData:atIndexPath:withLayout:')
-        # address = mach_info.get_method_address('ABKSettingViewController', 'viewWillAppear:')
-        # address = mach_info.get_method_address('PDDCrashManager', 'extractDataFromCrashReport:keyword:')
-        # address = mach_info.get_method_address('AMUpgradeInfo', 'initWithDictionary:')
-        # if address is not None:
-        #     method = _disasm_specified_function(arch, mode, mach_info.text, address, mach_info.text_addr, slice_addresses)
-        #     instruction = _analyse_method(method, mach_info, method_hub)
-            # check_has_paste_board(method_hub)
-        #     print(instruction.entry_block)
-        #     instruction.describe()
-        #     instruction.describe()
-        #     print(instruction.return_type)
-#             MethodStorage.insert_instructions(instruction)
-#             # MethodStorage.list_all()
-# #         method_instructions = MethodStorage.get_instructions('ABKWelcomeViewController', 'viewDidLoad')
-#             cfg = generate_cfg(instruction, cfg_provider, False)
-#             # cfg.describe()
-#             cfg.view()
-#         # for method_instructions in methods_instructions:
-#         #     generate_cfg(method_instructions, None)
-#
+    mach_o_file.close()
 # Reference:
 # > https://zhuanlan.zhihu.com/p/24858664

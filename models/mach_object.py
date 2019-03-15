@@ -112,7 +112,6 @@ class MachObject:
 
         self.text = self.generate_text()
         text_section, _ = self._sections['text']
-        # warningwarningwarning！！！！！！
         self.text_addr = text_section.addr  # 代码的内存（不是 offset）
 
         self.symbols = {}           # address: name
@@ -123,6 +122,7 @@ class MachObject:
         self.functions = {}         # impaddr: symbol_address
         self.functions_type = []    # < function_data >
         self.statics = {}
+        self.statics_class = {}     # static value: class_name
         self.ivars = {}             # ref_address: <ivar>
         # self.properties = {}
 
@@ -161,9 +161,9 @@ class MachObject:
 
         # self.parse_static()       # 修改成兼容 32-bit 和 64-bit
 
+        self.parse_cfstring()
         self.parse_class_methods_and_data()
         self.parse_cat_methods_and_data()
-        self.parse_cfstring()
         # print(self.dylib_frameworks_pair)
 
     def get_dylib_frameworks(self, framework_path):
@@ -253,7 +253,8 @@ class MachObject:
             text_begin = (
                     text.addr - self.offset if not self.is_64_bit else text.addr - 0x100000000)
         else:
-            text_begin = text.addr
+            text_begin = text.offset
+
         text_code = self.bytes[text_begin:text_begin + text.size]
         return text_code
 
@@ -272,11 +273,13 @@ class MachObject:
             _property = self.get_property_of_class(_class, method)
             if _property is not None:
                 return _property._type
+        if _class == 'UIApplication' and method == 'sharedApplication':
+            return 'UIApplication'
         if _class == 'UIScreen' and method == 'mainScreen':
             return 'UIScreen'
         if _class == 'UIPasteboard' and method == 'generalPasteboard':
             return 'UIPasteboard'
-        if method == 'view':
+        if method == 'view' or method == 'keyWindow':
             return 'UIView'
         if method.startswith('alloc') or method.startswith('init'):
             return '$SELF'
@@ -296,65 +299,39 @@ class MachObject:
     # 函数的返回值
     def get_return_type_from_function(self, name):
         if name == '___stack_chk_fail':
-            return 'void'
+            return 'None'
         for function_data in self.functions_type:
             if function_data.name == name:
                 return function_data.return_type
         if name.startswith('_objc'):
-            return 'void'
-        return 'id'
+            return 'None'
+        return 'None'
 
     def contain_block_arguments(self, _class, method):
         if _class == '$Function' and method == '_dispatch_once':
-            return [1]
+            return [1], True
         if _class == 'UIView' and method == 'animateWithDuration:animations:':
-            return [2]
-        return []
-
-    # 这个函数等会儿再改
-    # def parse_ivars(self):
-        # _, symtab = self._cmds["symtab"][0]
-        # _, ivar_index = self._sections["objc_ivar"]
-        # symoff = symtab.symoff
-        # nlist_size = Nlist64.N_TOTAL_SIZE
-        # sym_num = symtab.nsyms
-        # count = 0
-        # while count < sym_num:
-        #     nlist_begin = symoff + count * nlist_size
-        #     nlist_bytes = self.bytes[nlist_begin:nlist_begin + nlist_size]
-        #     nlist = Nlist64.parse_from_bytes(nlist_bytes)
-        #     if nlist.n_sect == ivar_index:
-        #         key = hex(nlist.n_value)
-        #         symbol_key = hex(symtab.stroff + nlist.n_strx + 0x100000000)
-        #         name = self.symbols[symbol_key]
-        #         class_name_begin = name.find("$") + 2
-        #         class_name_end = name.find(".")
-        #         class_name = name[class_name_begin:class_name_end]
-        #         ivar_name = name[class_name_end + 1:]
-        #         ivar = IvarData(ivar_name, class_name)
-        #         ivar_ref_addr = nlist.n_value - 0x100000000 if self.is_64_bit else nlist.n_value
-        #         ivar_ref = parse_int(
-        #             self.bytes[ivar_ref_addr:ivar_ref_addr + 8])
-        #         self.ivars[key] = ivar_ref
-        #         self.ivar_list.append(ivar)
-        #         self.ivar_refs[hex(ivar_ref)] = len(self.ivar_list) - 1
-        #     count += 1
+            return [2], False
+        return [], False
 
     # 解析 GlobalBlock
     def parse_block(self):
 
         block_class_names = ['__NSConcreteStackBlock', '__NSConcreteGlobalBlock', '__NSConcreteMallocBlock']
-        for dylib_addr in self.dylibs:
+        # print(self.dylibs)
+        for dylib_addr in self.dylibs:  # 这个是地址，不是 offset
             dylib_name = self.symbols[hex(self.dylibs[dylib_addr])]
             if dylib_name in block_class_names:
                 type = block_class_names.index(dylib_name)
                 block_address = int(dylib_addr, 16)
+                # print(hex(block_address))
                 if self.type == MachObjectTypeExecutable:
                     block_address_start = block_address - (self.offset if not self.is_64_bit else 0x100000000)
                 else:
                     block_address_start = block_address
                 block_address_end = block_address_start + (ObjcBlock.OB_TOTAL_SIZE if not self.is_64_bit else
                                                            ObjcBlock64.OB_TOTAL_SIZE)
+
                 block_bytes = self.bytes[block_address_start:block_address_end]
                 if self.is_64_bit:
                     ob = ObjcBlock64.parse_from_bytes(block_bytes)
@@ -375,11 +352,16 @@ class MachObject:
     def parse_cfstring(self):
         cfstring, _ = self._sections["cfstring"]
         base_address = cfstring.addr
+        if self.type == MachObjectTypeExecutable:
+            cfstring_offset = (cfstring.offset + 0x100000000 if self.is_64_bit else 0) - base_address
+        else:
+            cfstring_offset = 0
 
         if self.type == MachObjectTypeExecutable:
             start = base_address - self.offset if not self.is_64_bit else base_address - 0x100000000
         else:
             start = base_address
+        start = start + cfstring_offset
         end = start + cfstring.size
         while start < end:
             self.cfstrings[hex(base_address)] = hex(parse_int(self.bytes[start + 16: start + 24]))
@@ -403,11 +385,10 @@ class MachObject:
         # symbol_type = 0
         # symbol_segment = 0
         symbol_key = None
-        base_address = 0x0
+        base_address = 0x0  # 这个应该是 offset
         while not is_over:
             # 这个地方，真的不用减吗
             # 不用减，因为是与当前 Mach-O 开头的 offset
-            # print(hex(pointer))
             byte = parse_int(self.bytes[pointer:pointer + 1])
             opcode = byte & BIND_OPCODE_MASK
             if opcode == BIND_OPCODE_DONE:
@@ -452,7 +433,12 @@ class MachObject:
                     _, segment = self._cmds["segment64"][segment_index]
                 else:
                     _, segment = self._cmds["segment"][segment_index]
-                base_address = segment.vmaddr + val
+
+                # 这个地方被改了
+                if self.type == MachObjectTypeExecutable:
+                    base_address = (segment.fileoff + (0x100000000 if self.is_64_bit else 0)) + val
+                else:
+                    base_address = segment.fileoff + val
                 pointer += length
             elif opcode == BIND_OPCODE_ADD_ADDR_ULEB:
                 pointer += 1
@@ -463,6 +449,7 @@ class MachObject:
                 # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
                 # print(hex(base_address))
                 self.dylib_frameworks_pair[self.symbols[symbol_key]] = self.dylib_frameworks_path[lib_ordinal - 1]
+
                 self.dylibs[hex(base_address)] = int(symbol_key, 16)
                 base_address += (8 if self.is_64_bit else 4)
             elif opcode == BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB:
@@ -498,6 +485,8 @@ class MachObject:
           > self.methods : {impaddr : (classname, methodname)}
           > self.cat_datas : {cataddr : <cat>}
         '''
+        if "objc_catlist" not in self._sections:
+            return
         objc_catlist, _ = self._sections["objc_catlist"]
         if self.type == MachObjectTypeExecutable:
             catlist_addr = objc_catlist.addr - self.offset if not self.is_64_bit else objc_catlist.addr - 0x100000000
@@ -1086,14 +1075,22 @@ class MachObject:
     def parse_methtype(self):
         methtype, _ = self._sections["objc_methtype"]
         base_addr = methtype.addr
+
+        if self.type == MachObjectTypeExecutable:
+            methtype_offset = (methtype.offset + (0x100000000 if self.is_64_bit else 0)) - methtype.addr
+        else:
+            methtype_offset = 0
         # print(hex(base_addr))
         if self.type == MachObjectTypeExecutable:
             begin_pointer = base_addr - self.offset if not self.is_64_bit else base_addr - 0x100000000
         else:
             begin_pointer = base_addr
+
+        begin_pointer = begin_pointer + methtype_offset
         end_pointer = begin_pointer + methtype.size
         while begin_pointer < end_pointer:
             name_begin = begin_pointer
+
             methtype_key = hex(base_addr)
             if self.bytes[name_begin:name_begin + 1] == b'\x00':
                 self.symbols[methtype_key] = ''
@@ -1112,10 +1109,18 @@ class MachObject:
     def parse_cstring(self):
         cstring, _ = self._sections["cstring"]
         base_addr = cstring.addr
+
+        if self.type == MachObjectTypeExecutable:
+            cstring_offset = (cstring.offset + 0x100000000 if self.is_64_bit else 0) - base_addr
+        else:
+            cstring_offset = 0
+
         if self.type == MachObjectTypeExecutable:
             begin_pointer = base_addr - self.offset if not self.is_64_bit else base_addr - 0x100000000
         else:
             begin_pointer = base_addr
+
+        begin_pointer += cstring_offset
         end_pointer = begin_pointer + cstring.size
         while begin_pointer < end_pointer:
             name_begin = begin_pointer
@@ -1136,9 +1141,14 @@ class MachObject:
         objc_classname, _ = self._sections["objc_classname"]
         base_addr = objc_classname.addr
         if self.type == MachObjectTypeExecutable:
+            classname_offset = (objc_classname.offset + 0x100000000 if self.is_64_bit else 0) - base_addr
+        else:
+            classname_offset = 0
+        if self.type == MachObjectTypeExecutable:
             begin_pointer = base_addr - self.offset if not self.is_64_bit else base_addr - 0x100000000
         else:
             begin_pointer = base_addr
+        begin_pointer += classname_offset
         end_pointer = begin_pointer + objc_classname.size
         while begin_pointer < end_pointer:
             class_name_key = hex(base_addr)
@@ -1156,14 +1166,21 @@ class MachObject:
 
     def parse_methname(self):
         objc_methname, _ = self._sections["objc_methname"]
+
         base_addr = objc_methname.addr
+        if self.type == MachObjectTypeExecutable:
+            methname_offset = (objc_methname.offset + 0x100000000 if self.is_64_bit else 0) - base_addr
+        else:
+            methname_offset = 0
+
         if self.type == MachObjectTypeExecutable:
             begin_pointer = base_addr - self.offset if not self.is_64_bit else base_addr - 0x100000000
         else:
             begin_pointer = base_addr
+
+        begin_pointer += methname_offset
         end_pointer = begin_pointer + objc_methname.size
-        # print("begin: " + hex(begin_pointer))
-        # print("end: " + hex(end_pointer))
+
         while begin_pointer < end_pointer:
             name_begin = begin_pointer
 
@@ -1178,35 +1195,6 @@ class MachObject:
                 self.symbols[method_name_key] = parse_str(name_bytes)
                 base_addr += (name_end - name_begin + 1)
                 begin_pointer = name_end + 1
-
-    # def parse_static(self):
-        # _, symtab = self._cmds["symtab"][0]
-        # symoff = symtab.symoff
-        # sym_num = symtab.nsyms
-        # count = 0
-        # _, bss_index = self._sections["bss"]  # bss 段一般存放 static 变量
-        #
-        # if self.is_64_bit:
-        #     nlist_size = Nlist64.N_TOTAL_SIZE
-        # else:
-        #     nlist_size = Nlist.N_TOTAL_SIZE
-        #
-        # while count < sym_num:
-        #     nlist_begin = symoff + count * nlist_size
-        #     nlist_bytes = self.bytes[nlist_begin:nlist_begin + nlist_size]
-        #     if self.is_64_bit:
-        #         nlist = Nlist64.parse_from_bytes(nlist_bytes)
-        #     else:
-        #         nlist = Nlist.parse_from_bytes(nlist_bytes)
-        #     if nlist.n_sect == bss_index:  # 位于 bss 段中的常量
-        #         key = hex(nlist.n_value)
-        #         symbol_addr = symtab.stroff + nlist.n_strx
-        #         if self.is_64_bit:
-        #             symbol_addr += 0x100000000
-        #         else:
-        #             symbol_addr += self.offset
-        #         self.statics[key] = symbol_addr
-        #     count += 1
 
     def parse_functions(self):
         _, dysymtab = self._cmds["dysymtab"][0]
