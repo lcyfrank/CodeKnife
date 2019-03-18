@@ -2,7 +2,7 @@ from models.macho_method_hub import *
 
 
 def _check_access_keychain_for_method(method, method_hub, method_cache, recursive_set=set([])):
-    print(method.method_name)
+    # print(method.method_name)
 
     recursive_set.add(method)
 
@@ -45,7 +45,7 @@ def _check_access_keychain_for_method(method, method_hub, method_cache, recursiv
             if class_name in method_cache:
                 class_method_cache = method_cache[class_name]
 
-            print('\tgoto:', class_name, method_name)
+            # print('\tgoto:', class_name, method_name)
             called_method = method_hub.get_method_insn(class_name, method_name)
             if called_method is not None:
                 if class_method_cache is not None and method_name in class_method_cache:  # Already

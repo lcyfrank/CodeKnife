@@ -861,10 +861,10 @@ def static_analysis(binary_file, arch=0):
             # print(instruction.entry_block)
         # instruction.describe()
 
-        # pasted_method = check_has_paste_board(method_hub)
-        # storage_method = check_storage_type(method_hub)
-        # background_behaviours = check_enter_background(method_hub)
-        # possible_hot_fix_method = check_possible_hot_fix(method_hub)
+        pasted_method = check_has_paste_board(method_hub)
+        storage_method = check_storage_type(method_hub)
+        background_behaviours = check_enter_background(method_hub)
+        possible_hot_fix_method = check_possible_hot_fix(method_hub)
         keychain_method = check_access_keychain(method_hub)
 
         # read_paste_method = pasted_method['read_paste_board']
@@ -878,14 +878,14 @@ def static_analysis(binary_file, arch=0):
         # for cls, method in write_paste_method:
         #     print('\t', cls, method)
         #
-        # print(pasted_method)
-        #
-        # print(storage_method)
-        #
-        # print(background_behaviours)
-        #
-        # print(possible_hot_fix_method)
-        #
+        print(pasted_method)
+
+        print(storage_method)
+
+        print(background_behaviours)
+
+        print(possible_hot_fix_method)
+
         print(keychain_method)
 
     mach_o_file.close()
