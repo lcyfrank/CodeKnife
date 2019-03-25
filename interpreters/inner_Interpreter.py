@@ -432,8 +432,8 @@ class Interpreter:
             if operand.type == ARM64_OP_REG:
                 reg_name = insn.reg_name(operand.reg)
                 register = self.get_register(reg_name)
-                if hex(memory + j * length) in self.memory:
 
+                if hex(memory + j * length) in self.memory:
                     memory_value = self.memory[hex(memory + j * length)]
                     wrap = 0xff
                     for i in range(1, length):

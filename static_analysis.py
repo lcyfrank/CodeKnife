@@ -13,11 +13,6 @@ from checker.keychain_checker import *
 from checker.background_checker import *
 from checker.hotfix_checker import *
 
-# TEST_PATH = './Test'
-# TEST_PATH = './Target/HotPatchDemo'
-# TEST_PATH = './Target/pinduoduo'
-TEST_PATH = './Target/AccountBook'
-
 # Constant
 FA_CPU_TYPE_KEY = 'cputype'
 FA_CPU_SUBTYPE_KEY = 'cpu_subtype'
@@ -54,93 +49,7 @@ def _disasm_specified_function(arch, mode, machine_code, address, base_address, 
     return current_function
 
 
-def _sub_slice_handle(trunk_id, arch, mode, sub_machine_code, part_base_addr, slice_address,
-                      process_sub_functions, process_remain_instructions, lock):
-
-    #
-    # all_functions.append(current_function)
-    # method_hub.insert_cs_insn(current_function)
-    # return all_functions
-    #
-    #
-    model = Cs(arch=arch, mode=mode)
-    model.detail = True
-
-    sub_functions = []
-    current_function = []
-    last_addr = part_base_addr - 4
-
-    slice_index = 0
-    while int(slice_address[slice_index + 1], 16) < last_addr:
-        slice_index += 1
-    slice_addr = int(slice_address[slice_index], 16)  # 当前的函数/方法边界
-
-    while last_addr - part_base_addr + 4 < len(sub_machine_code):
-        last_addr += 4
-        temp_sub_machine_code = sub_machine_code[last_addr - part_base_addr:]
-        for insn in model.disasm(temp_sub_machine_code, last_addr):
-            last_addr = insn.address
-            if last_addr < slice_addr:
-                current_function.append(insn)
-            elif last_addr == slice_addr:
-                if len(current_function) != 0:
-                    sub_functions.append(current_function)
-                    # method_hub
-                    current_function = []
-                slice_index += 1
-                slice_addr = int(slice_address[slice_index + 1], 16)
-                current_function.append(insn)
-            else:
-                while last_addr > slice_addr:
-                    slice_index += 1
-                    slice_addr = int(slice_address[slice_index + 1], 16)
-                if last_addr == slice_addr:
-                    if len(current_function) != 0:
-                        sub_functions.append(current_function)
-                        # method_hub
-                        current_function = []
-                    slice_index += 1
-                    slice_addr = int(slice_address[slice_index + 1], 16)
-                    current_function.append(insn)
-                else:
-                    current_function.append(insn)
-
-    with lock:
-        process_sub_functions[trunk_id] = trunk_id
-        process_remain_instructions[trunk_id] = current_function
-
-
 def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_address, method_hub=None):
-    # each_trunk = 0x1000
-    # if len(machine_code) > each_trunk:
-    #     print('sub process')
-    #
-    #     manager = Manager()
-    #     process_remain_instructions = manager.dict()  # {trunk_id: remain}
-    #     process_sub_functions = manager.dict()  # {trunk_id: sub}
-    #     lock = manager.Lock()
-
-        # # 开子进程
-        # process_count = 4
-        # process_pool = Pool()
-        # for i in range(process_count):
-        #     machine_code_begin = i * each_trunk
-        #     machine_code_end = i * each_trunk + each_trunk
-        #     if machine_code_end >= len(machine_code):
-        #         machine_code_end = len(machine_code) - 1
-        #
-        #     sub_machine_code = machine_code[machine_code_begin:machine_code_end]
-        #     part_base_address = base_addr + i * each_trunk
-        #
-        #     process_pool.apply_async(_sub_slice_handle, args=(i, arch, mode, sub_machine_code, part_base_address,
-        #                                                                slice_address, process_sub_functions, process_remain_instructions, lock))
-        # process_pool.close()
-        # process_pool.join()
-        #
-        # print(process_remain_instructions)
-
-    # else:
-        # 不用开子进程了
     model = Cs(arch=arch, mode=mode)
     model.detail = True
 
@@ -160,7 +69,6 @@ def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_addr
         for insn in model.disasm(temp_machine_code, last_addr):
             last_addr = insn.address
             progress_bar.update(4)
-            # print(hex(last_addr))
             if last_addr < slice_addr:
                 current_function.append(insn)
             elif last_addr == slice_addr:
@@ -299,9 +207,6 @@ def _analyse_reachable_of_basic_blocks(basic_blocks_keys, basic_blocks, method_r
 
 
 def get_obj_name(mach_info, value, class_name, class_data):
-    if class_name == 'PasteBoardManager':
-        print('dskjfhjkdshfjkshfjkshdjkf', hex(value))
-
     if value == SELF_POINTER:  # 自己的方法
         return class_name
     if value <= RETURN_VALUE:  # 某个方法的返回值
@@ -334,7 +239,6 @@ def get_obj_name(mach_info, value, class_name, class_data):
     if class_data is not None and 1 <= value // 0x8 <= len(class_data.ivars):  # 类中的变量
         ivar_index = value // 0x8 - 1
         ivar = class_data.ivars[ivar_index]
-        # obj_name = class_name + "->" + ivar.name
         return ivar._type
 
     if hex(value) in mach_info.cfstrings:  # 某个字符串的方法
@@ -343,11 +247,11 @@ def get_obj_name(mach_info, value, class_name, class_data):
         static_name = mach_info.statics[hex(value)]
         return mach_info.symbols[hex(static_name)]
 
-    print("Some error happens during analysis in get value in register 0 (Instance) %d" % value)
+    # print("Some error happens during analysis in get value in register 0 (Instance) %d" % value)
     return 'id'
 
 
-def handle_method_call(mach_info, class_data, inter, method_hub, instruction, recurive_stack=None, method=True, function_name=None):
+def handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recurive_stack=None, method=True, function_name=None):
 
     global _g_current_context
 
@@ -357,6 +261,7 @@ def handle_method_call(mach_info, class_data, inter, method_hub, instruction, re
         r_stack = set([])
 
     if method:
+        # !!!!!!
         if class_data is None:  # 分类
             class_name = '$Function'
         else:
@@ -367,12 +272,37 @@ def handle_method_call(mach_info, class_data, inter, method_hub, instruction, re
         try:
             meth_name = mach_info.symbols[hex(reg1_value)]
         except Exception as e:
-            print("Some error happens during analysis in get value in register 1 (Method)")
-            print(str(e))
-            return None
-        if meth_name == 'setString:':
-            print('daslfjdsklfjsdklafjlkdsjf', caller_name, class_name, reg0_value)
-            print(_g_return_types)
+            # print("Some error happens during analysis in get value in register 1 (Method)")
+            # print(str(e))
+            return False
+
+        # Handle Notification
+        if caller_name == 'NSNotificationCenter' and meth_name == 'addObserver:selector:name:object:':
+            observer = get_obj_name(mach_info, inter.gen_regs[2].value, class_name, class_data)
+            selector = mach_info.symbols[hex(inter.gen_regs[3].value)]
+
+            notification_name_key = hex(inter.gen_regs[4].value)
+            if notification_name_key in mach_info.symbols:
+                # System notification
+                notification = mach_info.symbols[notification_name_key]
+            elif notification_name_key in mach_info.cfstrings:
+                notification = mach_info.symbols[hex(mach_info.cfstrings[notification_name_key])]
+            else:
+                notification = 'Unknown'
+            mach_info.add_notification_observer(notification, observer, selector)
+
+        # Post Notification
+        if caller_name == 'NSNotificationCenter' and meth_name == 'postNotificationName:object:userInfo:':
+            notification_name_key = hex(inter.gen_regs[2].value)
+            if notification_name_key in mach_info.symbols:
+                # System notification
+                notification = mach_info.symbols[notification_name_key]
+            elif notification_name_key in mach_info.cfstrings:
+                notification = mach_info.symbols[hex(mach_info.cfstrings[notification_name_key])]
+            else:
+                notification = 'Unknown'
+            mach_info.post_notification(notification, class_name, method_name)
+
     else:
         caller_name = '$Function'
         meth_name = function_name
@@ -477,13 +407,11 @@ def handle_method_call(mach_info, class_data, inter, method_hub, instruction, re
                             return_type = mach_info.get_return_type_from_method(caller_name, meth_name)
                         else:
                             return_type = mach_info.get_return_type_from_function(meth_name)
-
                 else:
                     if method:
                         return_type = mach_info.get_return_type_from_method(caller_name, meth_name)
                     else:
                         return_type = mach_info.get_return_type_from_function(meth_name)
-
     # 返回值
     if return_type == '$SELF':
         return_type = caller_name
@@ -493,6 +421,7 @@ def handle_method_call(mach_info, class_data, inter, method_hub, instruction, re
         inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
 
     instruction.goto(caller_name, meth_name)  # ！！！！！！！！！！！！！
+    return True
 
 
 def handle_super_method(mach_info, class_data, inter, instruction):
@@ -504,9 +433,6 @@ def handle_super_method(mach_info, class_data, inter, instruction):
     if class_data is None:  # None 的时候通常是分类
         class_name = 'id'
         return_type = 'id'
-        # pass
-        # return_type = mach_info.get_return_type_from_method(class_name, meth_name)
-        # instruction.goto(class_name, meth_name)
     else:
         class_name = class_data.name
         return_type = mach_info.get_return_type_from_method(class_data.super, meth_name)
@@ -521,12 +447,12 @@ def handle_super_method(mach_info, class_data, inter, instruction):
     instruction.goto(class_name, meth_name)
 
 
-def _analyse_basic_block(block_instruction, identify, mach_info, class_data, inter, add_range, method_hub=None, recursive_stack=set([])):
+def _analyse_basic_block(block_instruction, identify, mach_info, class_data, method_name, inter, add_range, method_hub=None, recursive_stack=set([])):
     r_stack = recursive_stack.copy()
-    if class_data is None:
-        class_name = '$Function'
-    else:
-        class_name = class_data.name
+    # if class_data is None:
+    #     class_name = '$Function'
+    # else:
+    #     class_name = class_data.name
 
     basic_block = MethodBasicBlockInstructions(identify)
     for i in range(len(block_instruction)):
@@ -561,12 +487,14 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, int
 
             elif function_name == "_objc_msgSend":  # 调用方法
                 # 处理普通方法调用
-                handle_method_call(mach_info, class_data, inter, method_hub, instruction, recurive_stack=r_stack)
-                basic_block.insert_instruction(instruction)
+                result = handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recurive_stack=r_stack)
+                if result:
+                    basic_block.insert_instruction(instruction)
             else:
-                handle_method_call(mach_info, class_data, inter, method_hub, instruction, recursive_stack, False, function_name)
-                filtered_functions = {'_objc_msgSendSuper2', '_objc_storeStrong', '_objc_msgSend'}
-                if function_name not in filtered_functions:
+                result = handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recursive_stack, False, function_name)
+                filtered_functions = {'_objc_msgSendSuper2', '_objc_storeStrong', '_objc_msgSend',
+                                      '_objc_retainAutoreleasedReturnValue'}
+                if result and function_name not in filtered_functions:
                     basic_block.insert_instruction(instruction)
 
         elif cs_insn.id == ARM64_INS_B:
@@ -605,10 +533,16 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
     r_stack = recursive_stack.copy()
 
     def memory_provider(address):
-        if address < 0x1000:
+        if address < 0x1000:  # 因为小于 0x1000 不会是地址，当时是为了 ivar
             return address
         try:
-            return mach_info.get_memory_content(address, 8)
+            result, content = mach_info.get_memory_content(address, 8)
+            if result:
+                return content
+            else:
+                if hex(address) in mach_info.symbols:
+                    return address
+                return content
         except Exception as _:
             return 0
 
@@ -623,7 +557,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
         class_name, method_name = mach_info.methods[method_address_key]
     elif method_address_key in mach_info.functions:
         class_name = '$Function'
-        method_name = mach_info.functions[method_address_key]
+        method_name = mach_info.symbols[hex(mach_info.functions[method_address_key])]
     else:
         return None
 
@@ -721,7 +655,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
 
         # 模拟执行这个基本块
         block = _analyse_basic_block(block_instructions, hex(block_instructions[0].address),
-                                     mach_info, class_data, inter, (method[0].address, method[-1].address), method_hub, r_stack)
+                                     mach_info, class_data, method_name, inter, (method[0].address, method[-1].address), method_hub, r_stack)
         method_instructions.all_blocks[block.identify] = block
 
         # 执行完毕，获取其后续块（跳转过去的块或者下一个块）
@@ -789,7 +723,6 @@ def static_analysis(binary_file, arch=0):
         else:
             return open(file_path, 'rb')
 
-
     mach_o_file = open(binary_file, 'rb')
 
     if arch == 0:
@@ -802,8 +735,6 @@ def static_analysis(binary_file, arch=0):
     mach_container = MachContainer(mach_o_file.read(), file_provider=macho_file_provider, mode=mode)
 
     for mach_info in mach_container.mach_objects:
-        # print(mach_info.methods)
-        # print(mach_info.methods_type[0])
         arch = CS_ARCH_ALL
         mode = CS_MODE_32
         if mach_info.cpu_type == CPU_TYPE_ARM:
@@ -845,9 +776,6 @@ def static_analysis(binary_file, arch=0):
                                 method = _disasm_specified_function(arch, mode, dylib_mach_info.text, address, dylib_mach_info.text_addr, dylib_slice_address)
                                 instruction = _analyse_method(method, dylib_mach_info)
                                 MethodStorage.insert_instructions(instruction)
-                    # print(mach_info.dylib_frameworks_pair)
-                    # framework_path = mach_info.dylib_frameworks_pair[class_name]
-                    # print(framework_path)
             return instruction
 
         print("Start disassemble all methods!")
@@ -855,18 +783,22 @@ def static_analysis(binary_file, arch=0):
         methods_hubs.append(method_hub)
         method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr, sorted_slice_addresses, method_hub=method_hub)
         print("Disassemble complete!")
-        # method_instruction = method_instructions[0]
         for method_instruction in method_instructions:
-            instruction = _analyse_method(method_instruction, mach_info, method_hub=method_hub)
-            # print(instruction.entry_block)
-        # instruction.describe()
+            _analyse_method(method_instruction, mach_info, method_hub=method_hub)
 
-        pasted_method = check_has_paste_board(method_hub)
-        storage_method = check_storage_type(method_hub)
-        background_behaviours = check_enter_background(method_hub)
-        possible_hot_fix_method = check_possible_hot_fix(method_hub)
-        keychain_method = check_access_keychain(method_hub)
+        print(mach_info.notification_poster)
+        print(mach_info.notification_handler)
 
+        # pasted_method = check_has_paste_board(method_hub)
+        # storage_method = check_storage_type(method_hub)
+        # background_behaviours = check_enter_background(method_hub)
+        # possible_hot_fix_method = check_possible_hot_fix(method_hub)
+        # keychain_method = check_access_keychain(method_hub)
+
+        # address = mach_info.get_method_address('ABKCategoryManageViewController', 'viewDidLoad')
+        # if address is not None:
+        #     instruction = _disasm_specified_function(arch, mode, mach_info.text, address, mach_info.text_addr, sorted_slice_addresses)
+        #     _analyse_method(instruction, mach_info, method_hub)
         # read_paste_method = pasted_method['read_paste_board']
         # write_paste_method = pasted_method['write_paste_board']
         # print('Follow methods has read the content from paste board')
@@ -878,15 +810,15 @@ def static_analysis(binary_file, arch=0):
         # for cls, method in write_paste_method:
         #     print('\t', cls, method)
         #
-        print(pasted_method)
-
-        print(storage_method)
-
-        print(background_behaviours)
-
-        print(possible_hot_fix_method)
-
-        print(keychain_method)
+        # print(pasted_method)
+        #
+        # print(storage_method)
+        #
+        # print(background_behaviours)
+        #
+        # print(possible_hot_fix_method)
+        #
+        # print(keychain_method)
 
     mach_o_file.close()
 # Reference:

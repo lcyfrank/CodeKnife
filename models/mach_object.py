@@ -5,6 +5,7 @@ from models.mach_o.loader import *
 from models.mach_o.nlist import *
 from models.objc_runtime import *
 from models.class_storage import *
+from models.objc_method import objc_methods
 
 SELF_POINTER = -0x1000000
 CURRENT_SELECTOR = -0x2000000
@@ -87,6 +88,9 @@ class MachObject:
 
         self.dylib_frameworks_pair = {}  # dylib_class: framework_path
 
+        self.notification_handler = {}  # NSNotification 处理方法  {notification: [()]}
+        self.notification_poster = {}  # NSNotification 发送的方法  {notification: [()]}
+
         self.bytes = _bytes
         self.offset = _offset
         self.is_64_bit = _bytes.startswith(b'\xcf\xfa\xed\xfe')
@@ -166,6 +170,16 @@ class MachObject:
         self.parse_cat_methods_and_data()
         # print(self.dylib_frameworks_pair)
 
+    def post_notification(self, notification, poster, selector):
+        if notification not in self.notification_poster:
+            self.notification_poster[notification] = []
+        self.notification_poster[notification].append((poster, selector))
+
+    def add_notification_observer(self, notification, observer, selector):
+        if notification not in self.notification_handler:
+            self.notification_handler[notification] = []
+        self.notification_handler[notification].append((observer, selector))
+
     def get_dylib_frameworks(self, framework_path):
 
         if framework_path in self.dylib_frameworks_mach:
@@ -227,25 +241,25 @@ class MachObject:
     def get_memory_content(self, address, size):
         address_key = hex(address)
         if address_key in self.dylibs:
-            return self.dylibs[address_key]
+            return True, self.dylibs[address_key]
         elif address_key in self.functions:
-            return self.functions[address_key]
+            return True, self.functions[address_key]
         elif address_key in self.ivars:
-            return self.ivars[address_key]
+            return True, self.ivars[address_key]
         elif address_key in self.statics:
-            return self.statics[address_key]
+            return True, self.statics[address_key]
         else:
             if hex(address - SELF_POINTER) in self.ivar_refs:
-                return self.ivar_refs[hex(address - SELF_POINTER)]
+                return True, self.ivar_refs[hex(address - SELF_POINTER)]
             else:
                 if self.type == MachObjectTypeExecutable:
                     if self.is_64_bit:
                         address = address - 0x100000000
                     else:
                         address = address - self.offset  # 因为这个 32-bit 的 address 是相对于整个文件的
-                    return parse_int(self.bytes[address:address + size])
+                    return False, parse_int(self.bytes[address:address + size])
                 else:
-                    return parse_int(self.bytes[address:address + size])
+                    return False, parse_int(self.bytes[address:address + size])
 
     def generate_text(self):
         text, _ = self._sections['text']
@@ -269,18 +283,22 @@ class MachObject:
 
     # 方法的返回值
     def get_return_type_from_method(self, _class, method):
+        # 可能是 getter
         if ':' not in method:
             _property = self.get_property_of_class(_class, method)
             if _property is not None:
                 return _property._type
-        if _class == 'UIApplication' and method == 'sharedApplication':
-            return 'UIApplication'
-        if _class == 'UIScreen' and method == 'mainScreen':
-            return 'UIScreen'
-        if _class == 'UIPasteboard' and method == 'generalPasteboard':
-            return 'UIPasteboard'
-        if method == 'view' or method == 'keyWindow':
-            return 'UIView'
+
+        # 查看系统的方法返回值
+        if _class in objc_methods:
+            class_methods = objc_methods[_class]
+            if method in class_methods:
+                return class_methods[method]
+        general_methods = objc_methods['*']
+        if method in general_methods:
+            return general_methods[method]
+
+        # 通用的 alloc 或 init 方法
         if method.startswith('alloc') or method.startswith('init'):
             return '$SELF'
         if (_class, method) not in self.methods_type:
@@ -364,7 +382,7 @@ class MachObject:
         start = start + cfstring_offset
         end = start + cfstring.size
         while start < end:
-            self.cfstrings[hex(base_address)] = hex(parse_int(self.bytes[start + 16: start + 24]))
+            self.cfstrings[hex(base_address)] = parse_int(self.bytes[start + 16: start + 24])
             base_address += 32
             start += 32
 
@@ -417,7 +435,6 @@ class MachObject:
                         name_begin + 0x100000000) if self.is_64_bit else hex(name_begin + self.offset)
                 else:
                     symbol_key = hex(name_begin)
-                # print(symbol_name)
                 self.symbols[symbol_key] = symbol_name
                 pointer = name_end
             elif opcode == BIND_OPCODE_SET_TYPE_IMM:
