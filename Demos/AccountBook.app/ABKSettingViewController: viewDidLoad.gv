@@ -1,0 +1,12 @@
+digraph "ABKSettingViewController: viewDidLoad" {
+	"0x100006604" [label="ABKBaseViewController: viewDidLoad
+UIColor: whiteColor
+ABKSettingViewController: view
+UIView: setBackgroundColor:
+ABKSettingViewController: navigationController
+id: interactivePopGestureRecognizer
+id: setDelegate:
+ABKSettingViewController: initTableView
+ABKSettingViewController: initNavigationbar
+" shape=box]
+}

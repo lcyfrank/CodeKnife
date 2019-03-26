@@ -1,0 +1,16 @@
+digraph "ABKModelManager: manager" {
+	entry [label=entry]
+	subgraph cluster0x1000230f8 {
+		node0x1000230f8 [label="" shape=plaintext]
+	}
+	subgraph cluster0x100023158 {
+		node0x100023158 [label="" shape=plaintext]
+	}
+	subgraph cluster0x100023148 {
+		"0x1000231480" [label=<_dispatch_once> shape=box]
+	}
+	entry -> cluster0x1000230f8
+	cluster0x1000230f8 -> cluster0x100023158
+	cluster0x1000230f8 -> cluster0x100023148
+	cluster0x100023148 -> cluster0x100023158
+}

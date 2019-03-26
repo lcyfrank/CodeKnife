@@ -1,0 +1,91 @@
+digraph "ABKCategoryManageViewController: viewDidLoad" {
+	"0x10001cc7c" [label="NSNotificationCenter: defaultCenter
+id: addObserver:selector:name:object:
+NSNotificationCenter: defaultCenter
+id: addObserver:selector:name:object:
+ABKBaseViewController: viewDidLoad
+ABKCategoryManageViewController: setTouchToHideKeyboard:
+UIColor: whiteColor
+ABKCategoryManageViewController: view
+UIView: setBackgroundColor:
+ABKCategoryManageViewController: setupNavigationbar
+ABKCategoryManageViewController: setupTableView
+UIView: alloc
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetHeight
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetWidth
+_CGRectMake
+UIView: initWithFrame:
+UIColor: colorWithRed:green:blue:alpha:
+UIView: setBackgroundColor:
+UITextField: alloc
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetWidth
+_CGRectMake
+UITextField: initWithFrame:
+UITextField: layer
+id: setCornerRadius:
+UIView: alloc
+_CGRectMake
+UIView: initWithFrame:
+UITextField: setLeftView:
+UITextField: setLeftViewMode:
+UIView: alloc
+_CGRectMake
+UIView: initWithFrame:
+UITextField: setRightView:
+UITextField: setRightViewMode:
+UIColor: whiteColor
+UITextField: setBackgroundColor:
+UITextField: addTarget:action:forControlEvents:
+UIView: addSubview:
+ABKCategoryManageViewController: setCategoryTextField:
+" shape=box]
+	"0x100034900" [label="ABKSmallButton: alloc
+_CGRectMake
+ABKSmallButton: initWithFrame:buttonStyle:
+" shape=box]
+	"0x10001d29c" [label="id: setTitle:forState:
+id: addTarget:action:forControlEvents:
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetWidth
+_CGRectMake
+id: setFrame:
+UIView: addSubview:
+ABKCategoryManageViewController: setConfirmButton:
+ABKCategoryManageViewController: view
+UIView: addSubview:
+ABKCategoryManageViewController: setInputView:
+" shape=box]
+	"0x1000230f8" [label="{NON_API_CALLED}" shape=box]
+	"0x100023158" [label="{NON_API_CALLED}" shape=box]
+	"0x100023148" [label=_dispatch_once
+ shape=box]
+	"0x10001d48c" [label="id: accountCategories
+id: count
+" shape=box]
+	"0x10001d548" [label="ABKCategoryManageViewController: addButton
+id: setEnabled:
+" shape=box]
+	"0x10001d4f8" [label="ABKCategoryManageViewController: addButton
+id: setEnabled:
+" shape=box]
+	"0x10001d594" [label="{NON_API_CALLED}" shape=box]
+	"0x10001d594" [label="{NON_API_CALLED}" shape=box]
+	"0x10001cc7c" -> "0x100034900"
+	"0x100034900" -> "0x10001d29c"
+	"0x10001d29c" -> "0x1000230f8"
+	"0x1000230f8" -> "0x100023158"
+	"0x1000230f8" -> "0x100023148"
+	"0x100023158" -> "0x10001d48c"
+	"0x100023148" -> "0x100023158"
+	"0x10001d48c" -> "0x10001d548"
+	"0x10001d48c" -> "0x10001d4f8"
+	"0x10001d548" -> "0x10001d594"
+	"0x10001d4f8" -> "0x10001d594"
+}

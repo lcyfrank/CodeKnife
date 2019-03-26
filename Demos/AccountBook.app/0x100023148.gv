@@ -1,0 +1,4 @@
+digraph "0x100023148" {
+	compound=true
+	0 [label=_dispatch_once shape=box]
+}

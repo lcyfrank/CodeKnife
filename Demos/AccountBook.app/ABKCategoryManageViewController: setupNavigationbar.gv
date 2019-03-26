@@ -1,0 +1,25 @@
+digraph "ABKCategoryManageViewController: setupNavigationbar" {
+	"0x10001e20c" [label="UIBarButtonItem: alloc
+UIImage: imageNamed:
+UIBarButtonItem: initWithImage:style:target:action:
+ABKCategoryManageViewController: setTitle:
+ABKCategoryManageViewController: navigationItem
+id: setLeftBarButtonItem:
+ABKSmallButton: smallButtonWithButtonStyle:
+id: setTitle:forState:
+id: addTarget:action:forControlEvents:
+UIBarButtonItem: alloc
+UIBarButtonItem: initWithCustomView:
+ABKCategoryManageViewController: setSelectButton:
+ABKCategoryManageViewController: navigationItem
+id: setRightBarButtonItem:
+ABKSmallButton: smallButtonWithButtonStyle:
+id: setTitle:forState:
+id: addTarget:action:forControlEvents:
+ABKCategoryManageViewController: setCancelButton:
+ABKSmallButton: smallButtonWithButtonStyle:
+id: setTitle:forState:
+id: addTarget:action:forControlEvents:
+ABKCategoryManageViewController: setDeleteButton:
+" shape=box]
+}

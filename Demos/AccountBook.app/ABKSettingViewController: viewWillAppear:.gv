@@ -1,0 +1,60 @@
+digraph "ABKSettingViewController: viewWillAppear:" {
+	"0x10000682c" [label="ABKBaseViewController: viewWillAppear:
+ABKSettingViewController: navigationController
+id: setNavigationBarHidden:animated:
+" shape=box]
+	"0x1000068e40x10000807c" [label="{NON_API_CALLED}" shape=box]
+	"0x1000068e8" [label="{NON_API_CALLED}" shape=box]
+	"0x1000069080x100043fb0" [label="{NON_API_CALLED}" shape=box]
+	"0x100043ff00x1000355e0" [label="{NON_API_CALLED}" shape=box]
+	"0x100043ff00x100035640" [label="{NON_API_CALLED}" shape=box]
+	"0x100043ff00x100035630" [label=_dispatch_once
+ shape=box]
+	"0x100035660" [label="ABKUserInfo: alloc
+" shape=box]
+	"0x1000356a00x1000356c8" [label="{NON_API_CALLED}" shape=box]
+	"0x1000356a00x100035710" [label="NSObject: init
+" shape=box]
+	"0x1000356a00x1000356ec" [label="{NON_API_CALLED}" shape=box]
+	"0x1000356a00x10003576c" [label="{NON_API_CALLED}" shape=box]
+	"0x1000356a00x100035768" [label="{NON_API_CALLED}" shape=box]
+	"0x1000356a00x100035784" [label="{NON_API_CALLED}" shape=box]
+	"0x1000356a4" [label="{NON_API_CALLED}" shape=box]
+	"0x100035660" -> "0x1000356a00x1000356c8"
+	"0x1000356a00x1000356c8" -> "0x1000356a00x100035710"
+	"0x1000356a00x1000356c8" -> "0x1000356a00x1000356ec"
+	"0x1000356a00x100035710" -> "0x1000356a00x10003576c"
+	"0x1000356a00x100035710" -> "0x1000356a00x100035768"
+	"0x1000356a00x1000356ec" -> "0x1000356a00x100035784"
+	"0x1000356a00x10003576c" -> "0x1000356a00x100035784"
+	"0x1000356a00x100035768" -> "0x1000356a00x10003576c"
+	"0x1000356a00x100035784" -> "0x1000356a4"
+	"0x100043ff00x100035630" -> "0x100035660"
+	"0x1000356a4" -> "0x100043ff00x100035630"
+	"0x1000069080x100043ff4" [label="id: name
+NSString: stringWithFormat:
+" shape=box]
+	"0x10004406c0x100044140" [label="{NON_API_CALLED}" shape=box]
+	"0x1000069080x100044070" [label="UILabel: setText:
+" shape=box]
+	"0x10000690c" [label="UIView: animateWithDuration:animations:
+" shape=box]
+	"0x1000069b4" [label="_CGAffineTransformMakeRotation
+id: closeButton
+_memcpy
+id: setTransform:
+" shape=box]
+	"0x10000690c" -> "0x1000069b4"
+	"0x1000069b4" -> "0x10000690c"
+	"0x10000682c" -> "0x1000068e40x10000807c"
+	"0x1000068e40x10000807c" -> "0x1000068e8"
+	"0x1000068e8" -> "0x1000069080x100043fb0"
+	"0x1000069080x100043fb0" -> "0x100043ff00x1000355e0"
+	"0x100043ff00x1000355e0" -> "0x100043ff00x100035640"
+	"0x100043ff00x1000355e0" -> "0x100043ff00x100035630"
+	"0x100043ff00x100035640" -> "0x1000069080x100043ff4"
+	"0x100043ff00x100035630" -> "0x100043ff00x100035640"
+	"0x1000069080x100043ff4" -> "0x10004406c0x100044140"
+	"0x10004406c0x100044140" -> "0x1000069080x100044070"
+	"0x1000069080x100044070" -> "0x10000690c"
+}

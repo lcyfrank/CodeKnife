@@ -1,0 +1,126 @@
+digraph "ABKWelcomeViewController: viewDidLoad" {
+	"0x10000a29c" [label="ABKBaseViewController: viewDidLoad
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetHeight
+UIColor: colorWithRed:green:blue:alpha:
+ABKWelcomeViewController: view
+UIView: setBackgroundColor:
+UILabel: alloc
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetWidth
+_CGRectMake
+UILabel: initWithFrame:
+UILabel: setTextAlignment:
+UIFont: boldSystemFontOfSize:
+UILabel: setFont:
+UIColor: whiteColor
+UILabel: setTextColor:
+UILabel: setText:
+ABKWelcomeViewController: view
+UIView: addSubview:
+UILabel: alloc
+UILabel: frame
+_CGRectGetMaxY
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetWidth
+_CGRectMake
+UILabel: initWithFrame:
+UILabel: setTextAlignment:
+UIFont: boldSystemFontOfSize:
+UILabel: setFont:
+UIColor: whiteColor
+UILabel: setTextColor:
+UILabel: setText:
+ABKWelcomeViewController: view
+UIView: addSubview:
+UILabel: alloc
+UILabel: frame
+_CGRectGetMaxY
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetWidth
+_CGRectMake
+UILabel: initWithFrame:
+UILabel: setTextAlignment:
+UIFont: boldSystemFontOfSize:
+UILabel: setFont:
+UIColor: whiteColor
+UILabel: setTextColor:
+UILabel: setText:
+UILabel: setAlpha:
+ABKWelcomeViewController: view
+UIView: addSubview:
+ABKWelcomeViewController: setWarningLabel:
+ABKTextField: alloc
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetWidth
+UILabel: frame
+_CGRectGetMaxY
+_CGRectMake
+ABKTextField: initWithFrame:
+UIColor: clearColor
+id: setBackgroundColor:
+UIColor: whiteColor
+id: setTintColor:
+id: setTextAlignment:
+UIFont: boldSystemFontOfSize:
+id: setFont:
+UIColor: whiteColor
+id: setTextColor:
+id: setDelegate:
+id: setCanPaste:
+id: addTarget:action:forControlEvents:
+ABKWelcomeViewController: view
+UIView: addSubview:
+ABKWelcomeViewController: setNameField:
+UIView: alloc
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetWidth
+id: frame
+_CGRectGetMaxY
+_CGRectMake
+UIView: initWithFrame:
+UIColor: whiteColor
+UIView: setBackgroundColor:
+ABKWelcomeViewController: view
+UIView: addSubview:
+ABKWelcomeViewController: setLineView:
+UIButton: alloc
+UIScreen: mainScreen
+UIScreen: bounds
+_CGRectGetWidth
+UIView: frame
+_CGRectGetMaxY
+_CGRectMake
+UIButton: initWithFrame:
+UIColor: whiteColor
+UIButton: setBackgroundColor:
+UIButton: setTitle:forState:
+UIColor: colorWithRed:green:blue:alpha:
+UIButton: setTitleColor:forState:
+UIFont: boldSystemFontOfSize:
+UIButton: titleLabel
+id: setFont:
+UIButton: layer
+id: setCornerRadius:
+UIColor: whiteColor
+id: CGColor
+UIButton: layer
+id: setShadowColor:
+UIButton: layer
+id: setShadowOpacity:
+_CGSizeMake
+UIButton: layer
+id: setShadowOffset:
+UIButton: addTarget:action:forControlEvents:
+ABKWelcomeViewController: view
+UIView: addSubview:
+ABKWelcomeViewController: setConfirmButton:
+id: becomeFirstResponder
+" shape=box]
+}

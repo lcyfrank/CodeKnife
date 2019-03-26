@@ -1,0 +1,72 @@
+digraph "AppDelegate: application:didFinishLaunchingWithOptions:" {
+	"0x100037a64" [label="NSUserDefaults: standardUserDefaults
+id: stringForKey:
+" shape=box]
+	"0x100037bd8" [label="ABKUserInfo: sharedUserInfo
+id: setName:
+NSUserDefaults: standardUserDefaults
+id: stringForKey:
+NSBundle: mainBundle
+id: infoDictionary
+id: objectForKeyedSubscript:
+" shape=box]
+	"0x100037b40" [label="ABKWelcomeViewController: alloc
+ABKWelcomeViewController: init
+AppDelegate: window
+UIWindow: setRootViewController:
+" shape=box]
+	"0x100038108" [label="id: isEqualToString:
+" shape=box]
+	"0x100037d20" [label="ABKModelManager: manager
+id: queryItemsFromSQLiteWithConditions:ordered:orderKey:
+_memset
+id: countByEnumeratingWithState:objects:count:
+" shape=box]
+	"0x1000381cc" [label="{NON_API_CALLED}" shape=box]
+	"0x100038190" [label="{NON_API_CALLED}" shape=box]
+	"0x100038128" [label="NSUserDefaults: standardUserDefaults
+id: setObject:forKey:
+" shape=box]
+	"0x100038084" [label="NSUserDefaults: standardUserDefaults
+id: setObject:forKey:
+" shape=box]
+	"0x100037dec" [label="{NON_API_CALLED}" shape=box]
+	"0x100038238" [label=___stack_chk_fail
+ shape=box]
+	"0x100038220" [label="{NON_API_CALLED}" shape=box]
+	"0x100037e14" [label="{NON_API_CALLED}" shape=box]
+	"0x100037e44" [label="ABKModelManager: manager
+AppDelegate->_window: accountId
+NSNumber: numberWithUnsignedInteger:
+NSDictionary: dictionaryWithObjects:forKeys:count:
+AppDelegate->_window: category
+NSNumber: numberWithUnsignedLong:
+NSDictionary: dictionaryWithObjects:forKeys:count:
+id: updateItemsToSQLiteWithConditions:params:
+" shape=box]
+	"0x100037e3c" [label="{NON_API_CALLED}" shape=box]
+	"0x10003804c" [label="id: countByEnumeratingWithState:objects:count:
+" shape=box]
+	"0x100037a64" -> "0x100037bd8"
+	"0x100037a64" -> "0x100037b40"
+	"0x100037bd8" -> "0x100038108"
+	"0x100037bd8" -> "0x100037d20"
+	"0x100037b40" -> "0x1000381cc"
+	"0x100038108" -> "0x100038190"
+	"0x100038108" -> "0x100038128"
+	"0x100037d20" -> "0x100038084"
+	"0x100037d20" -> "0x100037dec"
+	"0x1000381cc" -> "0x100038238"
+	"0x1000381cc" -> "0x100038220"
+	"0x100038190" -> "0x1000381cc"
+	"0x100038128" -> "0x100038190"
+	"0x100038084" -> "0x100038108"
+	"0x100037dec" -> "0x100037e14"
+	"0x100037e14" -> "0x100037e44"
+	"0x100037e14" -> "0x100037e3c"
+	"0x100037e44" -> "0x100037e14"
+	"0x100037e44" -> "0x10003804c"
+	"0x100037e3c" -> "0x100037e44"
+	"0x10003804c" -> "0x100037e14"
+	"0x10003804c" -> "0x100038084"
+}

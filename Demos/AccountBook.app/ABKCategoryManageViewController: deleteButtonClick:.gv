@@ -1,0 +1,9 @@
+digraph "ABKCategoryManageViewController: deleteButtonClick:" {
+	"0x10001fa74" [label="UIAlertController: alertControllerWithTitle:message:preferredStyle:
+UIAlertAction: actionWithTitle:style:handler:
+UIAlertAction: actionWithTitle:style:handler:
+id: addAction:
+id: addAction:
+ABKCategoryManageViewController: presentViewController:animated:completion:
+" shape=box]
+}
