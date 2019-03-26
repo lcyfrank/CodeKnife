@@ -493,7 +493,7 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, met
             else:
                 result = handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recursive_stack, False, function_name)
                 filtered_functions = {'_objc_msgSendSuper2', '_objc_storeStrong', '_objc_msgSend',
-                                      '_objc_retainAutoreleasedReturnValue'}
+                                      '_objc_retainAutoreleasedReturnValue', '_objc_release'}
                 if result and function_name not in filtered_functions:
                     basic_block.insert_instruction(instruction)
 
@@ -786,32 +786,109 @@ def static_analysis(binary_file, arch=0):
         for method_instruction in method_instructions:
             _analyse_method(method_instruction, mach_info, method_hub=method_hub)
 
-        print(mach_info.notification_poster)
-        print(mach_info.notification_handler)
+        pasted_method = check_has_paste_board(method_hub)
+        storage_method = check_storage_type(method_hub)
+        background_behaviours = check_enter_background(method_hub)
+        possible_hot_fix_method = check_possible_hot_fix(method_hub)
+        keychain_method = check_access_keychain(method_hub)
 
-        # pasted_method = check_has_paste_board(method_hub)
-        # storage_method = check_storage_type(method_hub)
-        # background_behaviours = check_enter_background(method_hub)
-        # possible_hot_fix_method = check_possible_hot_fix(method_hub)
-        # keychain_method = check_access_keychain(method_hub)
+        print('')
+        # Output the result of analysis
+        print('===================================================')
+        # Output the method read or write paste board
+        read_paste_method = pasted_method['read_paste_board']
+        write_paste_method = pasted_method['write_paste_board']
+        print('Follow methods has read the content from paste board:')
+        for cls, method in read_paste_method:
+            print('\t', cls, method)
+        print('')
+        print('Follow methods has write the content to paste board:')
+        for cls, method in write_paste_method:
+            print('\t', cls, method)
+        print('')
 
-        # address = mach_info.get_method_address('ABKCategoryManageViewController', 'viewDidLoad')
-        # if address is not None:
-        #     instruction = _disasm_specified_function(arch, mode, mach_info.text, address, mach_info.text_addr, sorted_slice_addresses)
-        #     _analyse_method(instruction, mach_info, method_hub)
-        # read_paste_method = pasted_method['read_paste_board']
-        # write_paste_method = pasted_method['write_paste_board']
-        # print('Follow methods has read the content from paste board')
-        # for cls, method in read_paste_method:
-        #     print('\t', cls, method)
-        #
-        # print('')
-        # print('Follow methods has write the content to paste board')
-        # for cls, method in write_paste_method:
-        #     print('\t', cls, method)
-        #
-        # print(pasted_method)
-        #
+        print('===================================================')
+        # Output the method storage
+        print('Follow methods using `UserDefaults` to store data:')
+        for cls, method in storage_method['user_defaults']:
+            print('\t', cls, method)
+        print('')
+        print('Follow methods using `KeyArchived` to store data:')
+        for cls, method in storage_method['key_archived']:
+            print('\t', cls, method)
+        print('')
+        print('Follow methods using `SQLite` to store data:')
+        for cls, method in storage_method['sqlite']:
+            print('\t', cls, method)
+        print('')
+        print('Follow methods using `Core Data` to store data:')
+        for cls, method in storage_method['coredata']:
+            print('\t', cls, method)
+        print('')
+
+        print('===================================================')
+        # Output the method hotfix
+        print('Follow methods call the `JSContext` method, maybe using `hotfix`:')
+        print('* init JSContext:')
+        for cls, method in possible_hot_fix_method['js_context_init']:
+            print('\t', cls, method)
+        print('* set `OC` behaviour to JSContext: (The detail of behaviour cannot find out currently)')
+        for cls, method in possible_hot_fix_method['js_context_set']:
+            print('\t', cls, method)
+        print('* evaluate JSContext:')
+        for cls, method in possible_hot_fix_method['js_context_evaluate']:
+            print('\t', cls, method)
+        print('')
+
+        print('===================================================')
+        # Output the method keychain
+        print('Follow methods has added data to keychain:')
+        for cls, method in keychain_method['add_keychain']:
+            print('\t', cls, method)
+        print('')
+        print('Follow methods has searched data from keychain:')
+        for cls, method in keychain_method['search_keychain']:
+            print('\t', cls, method)
+        print('')
+        print('Follow methods has updated data to keychain:')
+        for cls, method in keychain_method['update_keychain']:
+            print('\t', cls, method)
+        print('')
+        print('Follow methods has deleted data from keychain:')
+        for cls, method in keychain_method['delete_keychain']:
+            print('\t', cls, method)
+        print('')
+
+        print('===================================================')
+        # Output the background behaviour keychain
+        print('Follow methods are the behaviours when the application did/will enter background:')
+        behaviours = background_behaviours['background_behaviours']
+        for key in behaviours:
+            if len(behaviours[key]) > 0:
+                cls, method = key
+                print('* In method `%s` of class `%s`' % (cls, method))
+                for api_cls, api_method in behaviours[key]:
+                    print('\t', api_cls, api_method)
+        print('')
+        
+        print('===================================================')
+        # Output the notification
+        print('Follow methods post notification:')
+        for notification in mach_info.notification_poster:
+            print('* %s' % notification)
+            for cls, method in mach_info.notification_poster[notification]:
+                print('\t', cls, method)
+        print('')
+
+        print('Follow methods handle notification:')
+        for notification in mach_info.notification_handler:
+            print('* %s' % notification)
+            for cls, method in mach_info.notification_handler[notification]:
+                print('\t', cls, method)
+
+
+
+
         # print(storage_method)
         #
         # print(background_behaviours)

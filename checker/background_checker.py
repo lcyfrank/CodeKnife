@@ -25,7 +25,7 @@ def _check_enter_background_for_method(method, method_hub, method_cache, recursi
             if class_name in method_cache:
                 class_method_cache = method_cache[class_name]
 
-            # print('\tgoto:', class_name, method_name)
+            print('\tgoto:', class_name, method_name)
             called_method = method_hub.get_method_insn(class_name, method_name)
             if called_method is not None:
                 if class_method_cache is not None and method_name in class_method_cache:  # Already
@@ -82,7 +82,7 @@ def check_enter_background(method_hub):
     }
 
     for class_key in method_hub.method_insns:  # 这样遍历字典速度比较快
-        # print('===================', class_key, '===================')
+        print(class_key + ':')
 
         class_method_cache = None
         if class_key in method_cache:

@@ -2,7 +2,6 @@ from models.macho_method_hub import *
 
 
 def _check_access_keychain_for_method(method, method_hub, method_cache, recursive_set=set([])):
-    # print(method.method_name)
 
     recursive_set.add(method)
 
@@ -45,7 +44,7 @@ def _check_access_keychain_for_method(method, method_hub, method_cache, recursiv
             if class_name in method_cache:
                 class_method_cache = method_cache[class_name]
 
-            # print('\tgoto:', class_name, method_name)
+            print('\tgoto:', class_name, method_name)
             called_method = method_hub.get_method_insn(class_name, method_name)
             if called_method is not None:
                 if class_method_cache is not None and method_name in class_method_cache:  # Already
@@ -112,7 +111,7 @@ def check_access_keychain(method_hub):
     method_cache = {}  # 使用 dict 存储结果 {class : {method_name: (0, 0, 0, 0)}}
 
     for class_key in method_hub.method_insns:  # 这样遍历字典速度比较快
-        # print('===================', class_key, '===================')
+        print(class_key + ':')
 
         class_method_cache = None
         if class_key in method_cache:
