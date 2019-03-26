@@ -870,7 +870,7 @@ def static_analysis(binary_file, arch=0):
                 for api_cls, api_method in behaviours[key]:
                     print('\t', api_cls, api_method)
         print('')
-        
+
         print('===================================================')
         # Output the notification
         print('Follow methods post notification:')
