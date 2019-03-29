@@ -19,6 +19,13 @@ body {
     background: #fff;
 }
 
+.card-row {
+    width: 350px;
+    height: auto;
+    float: left;
+    display: inline;
+}
+
 #title-label {
     margin-top: 200px;
     margin-left: 50px;
@@ -46,6 +53,11 @@ body {
 
 #upload-button:active {
     background: #366dbf;
+}
+
+#upload-button:disabled {
+    background: #96d3f2;
+    cursor: not-allowed;
 }
 
 #upload-tip {

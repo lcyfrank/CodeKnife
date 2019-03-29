@@ -4,6 +4,7 @@ import shutil
 import zipfile
 import plistlib
 from static_analysis import static_analysis
+from models.basic_info import ApplicationBasicInfo
 
 
 def extract_app_path_from_ipa(ipa_path):
@@ -18,6 +19,27 @@ def extract_app_path_from_ipa(ipa_path):
         tmp_file = os.listdir('.tmp/Payload')[0]
         return '.tmp/Payload/' + tmp_file
     return None
+
+
+def basic_analysis(path):
+    _, file_type = os.path.splitext(path)
+    target_app_path = None
+    if file_type == '.ipa':
+        target_app_path = extract_app_path_from_ipa(path)
+    elif file_type == '.app':
+        target_app_path = path
+
+    if target_app_path is None:
+        return None
+
+    os.chdir(target_app_path)
+    app_info_plist = 'Info.plist'
+
+    basic_info = ApplicationBasicInfo(target_app_path)
+    with open(app_info_plist, 'rb') as app_info_plist:
+        plist_content = plistlib.load(app_info_plist)
+        basic_info.execute_path = plist_content['CFBundleExecutable']
+    return basic_info
 
 
 if __name__ == '__main__':
