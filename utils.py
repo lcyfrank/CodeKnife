@@ -1,5 +1,7 @@
 import ctypes
-from datetime import datetime
+import hashlib
+import sys
+
 # Inner Function
 def parse_int(_bytes, little_end=True):
     if not little_end:
@@ -76,3 +78,7 @@ def sorted_list_for_hex_string(l):
     # after = datetime.now()
     # print((after - before).microseconds)
     return l
+
+def md5_for_file(file_path):
+    hash_code = hashlib.md5(open(file_path, 'rb').read()).hexdigest()
+    print(hash_code)

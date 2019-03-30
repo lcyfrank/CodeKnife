@@ -29,8 +29,13 @@ def analysis():
     if _g_file_path is not None:
         basic_info = basic_analysis(_g_file_path)
         _g_file_path = None
-        print(basic_info)
     return render_template('analysis.html')
+    # return '''
+    # <html>
+    # <head><title>Analysis</title></head>
+    # <body><h1>Access error!</h1></body>
+    # </html>
+    # '''
 
 
 def extract_from_zip(path):

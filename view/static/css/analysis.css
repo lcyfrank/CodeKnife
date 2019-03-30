@@ -6,3 +6,110 @@ body {
     height: 100%;
     background: RGB(236, 239, 244);
 }
+
+.v-navbar {
+    width: 200px;
+    border-right: 1px solid rgba(0, 0, 0, 0.125);
+}
+
+.v-navbar-section {
+    margin: 27px 30px 11px;
+    font-family: 'SF UI Text Medium', 'SF UI Text Light', 'Helvetica Neue', 'HelveticaNeue', Helvetica, Arial, Verdana, sans-serif;
+    font-weight: 500;
+    font-size: 11px;
+    line-height: 14px;
+    color: #bababa;
+}
+
+.v-navbar-list {
+    list-style: none;
+    padding-left: 0px;
+}
+
+.v-navbar-item {
+    margin: 0px;
+    line-height: 19px;
+}
+
+.v-navbar-item.active {
+    background: rgb(45, 125, 246);
+}
+
+.v-navbar-item.active a {
+    color: white;
+    text-decoration: none;
+}
+
+.v-navbar-item-content {
+    color: #000;
+    text-decoration: none;
+    display: block;
+    padding: 10px 30px;
+    margin-top: 0px;
+    font-family: 'SF UI Text Medium', 'SF UI Text Light', 'Helvetica Neue', 'HelveticaNeue', Helvetica, Arial, Verdana, sans-serif;
+    font-weight: 300;
+    letter-spacing: 0.05em;
+}
+
+.v-navbar-item-content:hover {
+    color: rgb(45, 125, 246);
+    text-decoration: none;
+}
+
+.section {
+    border-bottom: 1px solid #dcdcdc;
+}
+
+.section-header {
+    margin-top: 10px;
+    margin-bottom: 10px;
+    /*color: #a9a9a9;*/
+    font-family: 'SF UI Text Medium', 'SF UI Text Light', 'Helvetica Neue', 'HelveticaNeue', Helvetica, Arial, Verdana, sans-serif;
+    font-size: 20px;
+    font-weight: 400;
+    letter-spacing: 0.05em;
+}
+
+.section-header img {
+    border-radius: 3px;
+}
+
+.item-title {
+    font-family: 'SF UI Text Medium', 'SF UI Text Light', 'Helvetica Neue', 'HelveticaNeue', Helvetica, Arial, Verdana, sans-serif;
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 10px;
+}
+
+.item-value {
+    margin-left: 10px;
+    color: rgba(0, 0, 0, 0.8);
+    font-size: 13px;
+}
+
+.item-list {
+    margin-left: 10px;
+    margin-right: 10px;
+    padding: 0px;
+    border: 1px solid #ECEFF3;
+    border-radius: 5px;
+    width: auto;
+    list-style: none;
+}
+
+
+.item-list-item {
+    margin: 0;
+    padding-left: 5px;
+    color: rgba(0, 0, 0, 0.8);
+    font-size: 13px;
+    line-height: 30px;
+}
+
+/*.item-list-item:first-child {*/
+    /*border-top: 0;*/
+/*}*/
+
+.item-list-item:nth-child(odd) {
+    background: #ECEFF3;
+}

@@ -3,6 +3,7 @@ import os
 import shutil
 import zipfile
 import plistlib
+from utils import md5_for_file
 from static_analysis import static_analysis
 from models.basic_info import ApplicationBasicInfo
 
@@ -38,7 +39,17 @@ def basic_analysis(path):
     basic_info = ApplicationBasicInfo(target_app_path)
     with open(app_info_plist, 'rb') as app_info_plist:
         plist_content = plistlib.load(app_info_plist)
+
+        if 'CFBundleDisplayName' in plist_content:
+            display_name = plist_content['CFBundleDisplayName']
+        else:
+            display_name = plist_content['CFBundleName']
+        basic_info.display_name = display_name
         basic_info.execute_path = plist_content['CFBundleExecutable']
+        md5_for_file(basic_info.execute_path)
+        if 'CFBundleIcons' in plist_content:
+            icon_file = plist_content['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconFiles'][0]
+            basic_info.icon_path = icon_file
     return basic_info
 
 
