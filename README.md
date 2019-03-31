@@ -32,3 +32,8 @@ python3 ./view/home.py
 * **钥匙串访问检测**：针对 iOS 应用程序，检测访问钥匙串的方法，输出向钥匙串中增加数据、查询钥匙串中数据、更新钥匙串中数据，从钥匙串中删除数据的方法（函数）。示例：`Demos/KeychainDemo.app`
 * **进入后台行为检测**：针对 iOS 应用程序，检测其即将/已经进入后台时所调用的系统 API 行为。示例：`Demos/BackgroundDemo.app`
 * **应用内 Notification 检测**：针对 iOS 应用程序，检测内部发送的 Notification 以及相应的 Notification 的处理方法。示例：`Demos/AccountBook.app`
+
+### TODO List
+* 针对每一种检测项目和Demo的app文件，绘制其对应的control flow graph，并加以解释
+* 针对每一种检测项目，考虑是否可以加入一些数据流分析，对检测结果进行确认。如剪切板的访问，但是可能是正常的行为，通过判断是否APP获取到剪切板内容之后对其数据进行滥用而造成实质的危害
+* 设置一种打分机制，能够根据检测结果对APP存在的安全风险进行量化。
