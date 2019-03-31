@@ -71,7 +71,7 @@ body {
 }
 
 .section-header img {
-    border-radius: 3px;
+    border-radius: 5px;
 }
 
 .item-title {
@@ -112,4 +112,38 @@ body {
 
 .item-list-item:nth-child(odd) {
     background: #ECEFF3;
+}
+
+.item-table {
+
+}
+
+.item-table thead {
+    font-family: 'SF UI Text Medium', 'SF UI Text Light', 'Helvetica Neue', 'HelveticaNeue', Helvetica, Arial, Verdana, sans-serif;
+    font-weight: bold;
+    font-size: 15px;
+}
+
+.item-table tbody {
+    font-family: 'SF UI Text Medium', 'SF UI Text Light', 'Helvetica Neue', 'HelveticaNeue', Helvetica, Arial, Verdana, sans-serif;
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.8);
+}
+
+.item-table th {
+    border-right: 1px solid #dee2e6;
+}
+
+.item-table th:last-child {
+    border-right: none;
+}
+
+.item-table td {
+    padding: 10px;
+    border-right: 1px solid #dee2e6;
+    height: 60px;
+}
+
+.item-table td:last-child {
+    border-right: none;
 }

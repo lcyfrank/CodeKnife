@@ -5,7 +5,7 @@ import zipfile
 import plistlib
 from utils import md5_for_file
 from static_analysis import static_analysis
-from models.basic_info import ApplicationBasicInfo
+from models.basic_info import ApplicationBasicInfo, permission_pairs
 
 
 def extract_app_path_from_ipa(ipa_path):
@@ -33,10 +33,9 @@ def basic_analysis(path):
     if target_app_path is None:
         return None
 
-    os.chdir(target_app_path)
-    app_info_plist = 'Info.plist'
-
+    app_info_plist = os.path.join(target_app_path, 'Info.plist')
     basic_info = ApplicationBasicInfo(target_app_path)
+
     with open(app_info_plist, 'rb') as app_info_plist:
         plist_content = plistlib.load(app_info_plist)
 
@@ -46,10 +45,72 @@ def basic_analysis(path):
             display_name = plist_content['CFBundleName']
         basic_info.display_name = display_name
         basic_info.execute_path = plist_content['CFBundleExecutable']
-        md5_for_file(basic_info.execute_path)
+        device_family = plist_content['UIDeviceFamily']
+        if 1 in device_family and 2 in device_family:
+            basic_info.platform = 'Universal'
+        elif 1 in device_family:
+            basic_info.platform = 'iPhone'
+        else:
+            basic_info.platform = 'iPad'
+        basic_info.operating_system = plist_content['MinimumOSVersion']
+        basic_info.execute_hash = md5_for_file(os.path.join(target_app_path, basic_info.execute_path))
+        basic_info.bundle_identifier = plist_content['CFBundleIdentifier']
         if 'CFBundleIcons' in plist_content:
             icon_file = plist_content['CFBundleIcons']['CFBundlePrimaryIcon']['CFBundleIconFiles'][0]
-            basic_info.icon_path = icon_file
+            icon_file_path = os.path.join(target_app_path, icon_file) + '.png'
+            if not os.path.exists(icon_file_path):
+                icon_file += '@2x'
+                icon_file_path = os.path.join(target_app_path, icon_file) + '.png'
+            icon_file += '.png'
+            shutil.copy(icon_file_path, 'static/imgs/icons/' + basic_info.execute_hash + '.png')
+            basic_info.icon_path = basic_info.execute_hash + '.png'
+        basic_info.app_version = plist_content['CFBundleShortVersionString']
+
+        # URL Schemas
+        if 'CFBundleURLTypes' in plist_content:
+            url_types = plist_content['CFBundleURLTypes']
+            for url_type in url_types:
+                if 'CFBundleURLSchemes' in url_type:
+                    for url_schema in url_type['CFBundleURLSchemes']:
+                        basic_info.url_schemas.append(url_schema)
+
+        # Supported Document Type
+        if 'CFBundleDocumentTypes' in plist_content:
+            document_types = plist_content['CFBundleDocumentTypes']
+            for document_type in document_types:
+                if 'CFBundleTypeName' in document_type:
+                    basic_info.supported_document_type.append(document_type['CFBundleTypeName'])
+
+        basic_info.SDK_version = plist_content['DTSDKName']
+        basic_info.SDK_build = plist_content['DTSDKBuild']
+        basic_info.Xcode_version = plist_content['DTXcode']
+        basic_info.Xcode_build = plist_content['DTXcodeBuild']
+        basic_info.machine_build = plist_content['BuildMachineOSBuild']
+        basic_info.compiler = plist_content['DTCompiler']
+
+        # Requested Permissions
+        for permission_key in permission_pairs:
+            if permission_key in plist_content:
+                permission = (permission_key, permission_pairs[permission_key], plist_content[permission_key])
+                basic_info.requested_permissions.append(permission)
+
+        # Developed Files
+        # .html .css .js .db .plist .xml
+        file_types = {'.html', '.css', '.js', '.db', '.plist', '.xml'}
+        directory = [target_app_path]
+        while len(directory) > 0:
+            target_directory = directory[0]
+            directory = directory[1:]
+            for f in os.listdir(target_directory):
+                if os.path.isdir(os.path.join(target_directory, f)):
+                    directory.append(os.path.join(target_directory, f))
+                else:
+                    _, file_type = os.path.splitext(f)
+                    if file_type in file_types:
+                        file_directory = (target_directory + '/')[len(target_app_path) + 1:]
+                        file_name = f
+                        basic_info.developed_files.append((file_directory, file_name))
+
     return basic_info
 
 

@@ -81,4 +81,4 @@ def sorted_list_for_hex_string(l):
 
 def md5_for_file(file_path):
     hash_code = hashlib.md5(open(file_path, 'rb').read()).hexdigest()
-    print(hash_code)
+    return hash_code

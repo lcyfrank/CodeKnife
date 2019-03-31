@@ -37,72 +37,110 @@
     </div>
     <div class="col" style="background: white;">
         <div class="row">
-            <div class="col" style="margin: 10px 20px;">
+            <div class="col-4" style="margin: 10px 20px;">
                 <div class="section">
                     <div class="section-header">
-                        <img src="../static/imgs/AppIcon.png" width="33px" height="33px"> <strong>BillC</strong> / Basic
+                        {% if basic_info.icon_path is not none %}
+                        <img src="{{ '../static/imgs/icons/' + basic_info.icon_path }}" width="33px" height="33px">
+                        <strong>{{ basic_info.display_name }}</strong> / Basic
                         Information
+                        {% else %}
+                        <strong>{{ basic_info.display_name }}</strong> / Basic
+                        Information
+                        {% endif %}
                     </div>
                     <p class="item-title">Bundle identifier</p>
-                    <p class="item-value">com.lincy.AccountBook.dev</p>
+                    <p class="item-value">{{ basic_info.bundle_identifier }}</p>
                     <p class="item-title">Executable File</p>
-                    <p class="item-value">AccountBook</p>
+                    <p class="item-value">{{ basic_info.execute_path }}</p>
                     <p class="item-title">Executable File MD5</p>
-                    <p class="item-value">ed69fa1d176cef0b905e1bad367271e1</p>
+                    <p class="item-value">{{ basic_info.execute_hash }}</p>
                     <p class="item-title">Platform</p>
-                    <p class="item-value">iPhone</p>
+                    <p class="item-value">{{ basic_info.platform }}</p>
                     <p class="item-title">Operating System</p>
-                    <p class="item-value">iOS 11.0</p>
+                    <p class="item-value">{{ basic_info.operating_system }}</p>
                     <p class="item-title">Version</p>
-                    <p class="item-value">0.3.0</p>
+                    <p class="item-value">{{ basic_info.app_version }}</p>
                     <p class="item-title">URL Schemas</p>
+                    {% if basic_info.url_schemas|length() == 0 %}
+                    <p class="item-value">Empty</p>
+                    {% else %}
                     <ul class="item-list">
-                        <li class="item-list-item">wexinVideoAPI://</li>
-                        <li class="item-list-item">weixin://</li>
-                        <li class="item-list-item">weixinapp://</li>
-                        <li class="item-list-item">fb290293790992170://</li>
-                        <li class="item-list-item">wechat://</li>
-                        <li class="item-list-item">QQ41C152CF://</li>
-                        <li class="item-list-item">prefs://</li>
-                        <li class="item-list-item">wx703://</li>
+                        {% for schema in basic_info.url_schemas %}
+                        <li class="item-list-item">{{ schema + '://' }}</li>
+                        {% endfor %}
                     </ul>
+                    {% endif %}
                     <p class="item-title">Supported Document Type</p>
+                    {% if basic_info.supported_document_type|length() == 0 %}
+                    <p class="item-value">Empty</p>
+                    {% else %}
                     <ul class="item-list">
-                        <li class="item-list-item">officeopenxml</li>
-                        <li class="item-list-item">data</li>
-                        <li class="item-list-item">ppt</li>
-                        <li class="item-list-item">doc</li>
-                        <li class="item-list-item">xls</li>
-                        <li class="item-list-item">pdf</li>
-                        <li class="item-list-item">archive</li>
-                        <li class="item-list-item">audivideo</li>
-                        <li class="item-list-item">image</li>
-                        <li class="item-list-item">txt</li>
+                        {% for type in basic_info.supported_document_type %}
+                        <li class="item-list-item">{{ type }}</li>
+                        {% endfor %}
                     </ul>
+                    {% endif %}
                 </div>
                 <div class="section">
                     <div class="section-header">
                         Compile Information
                     </div>
                     <p class="item-title">SDK Version</p>
-                    <p class="item-value">iphoneos12.1</p>
+                    <p class="item-value">{{ basic_info.SDK_version }}</p>
                     <p class="item-title">SDK Build</p>
-                    <p class="item-value">16B91</p>
+                    <p class="item-value">{{ basic_info.SDK_build }}</p>
                     <p class="item-title">Xcode Version</p>
-                    <p class="item-value">1010</p>
+                    <p class="item-value">{{ basic_info.Xcode_version }}</p>
                     <p class="item-title">Xcode Build</p>
-                    <p class="item-value">10B61</p>
+                    <p class="item-value">{{ basic_info.Xcode_build }}</p>
                     <p class="item-title">Building Machine OS Build(Developed Machine)</p>
-                    <p class="item-value">18C54</p>
+                    <p class="item-value">{{ basic_info.machine_build }}</p>
                     <p class="item-title">Compiler</p>
-                    <p class="item-value">com.apple.compilers.llvm.clang.1_0</p>
+                    <p class="item-value">{{ basic_info.compiler }}</p>
                 </div>
             </div>
             <div class="col" style="margin: 10px 20px;">
                 <div class="section">
                     <div class="section-header">
-                        Required Permission
+                        Requested Permission
                     </div>
+                    {% if basic_info.requested_permissions|length() == 0 %}
+                    <p class="item-value">Empty</p>
+                    {% else %}
+                    <table class="table table-striped item-table">
+                        <thead>
+                        <tr>
+                            <th scope="col">Permission</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Request Reason</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for permission, description, reason in basic_info.requested_permissions %}
+                        <tr>
+                            <td>{{ permission }}</td>
+                            <td>{{ description }}</td>
+                            <td>{{ reason }}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                    {% endif %}
+                </div>
+                <div class="section">
+                    <div class="section-header">
+                        Developed Files
+                    </div>
+                    {% if basic_info.developed_files|length() == 0 %}
+                    <p class="item-value">Empty</p>
+                    {% else %}
+                    <ul class="item-list">
+                        {% for directory, f in basic_info.developed_files %}
+                        <li class="item-list-item">{{ directory }}<strong>{{ f }}</strong></li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
                 </div>
             </div>
         </div>

@@ -10,6 +10,7 @@ app.config['UPLOAD_FOLDER'] = 'upload'
 
 
 _g_file_path = None
+_g_basic_info = None
 
 
 def filter_file_type(file_name: str):
@@ -26,16 +27,17 @@ def index():
 @app.route('/analysis')
 def analysis():
     global _g_file_path
+    global _g_basic_info
     if _g_file_path is not None:
-        basic_info = basic_analysis(_g_file_path)
-        _g_file_path = None
-    return render_template('analysis.html')
-    # return '''
-    # <html>
-    # <head><title>Analysis</title></head>
-    # <body><h1>Access error!</h1></body>
-    # </html>
-    # '''
+        if _g_basic_info is None:
+            _g_basic_info = basic_analysis(_g_file_path)
+        return render_template('analysis.html', basic_info=_g_basic_info)
+    return '''
+    <html>
+    <head><title>Analysis</title></head>
+    <body><h1>Access error!</h1></body>
+    </html>
+    '''
 
 
 def extract_from_zip(path):
@@ -48,11 +50,17 @@ def extract_from_zip(path):
 @app.route('/upload', methods=['POST'])
 def upload_file():
     global _g_file_path
+    global _g_basic_info
+
+    _g_basic_info = None
+    print(os.getcwd())
     if 'file' in request.files:
         file = request.files['file']
         file_name = file.filename
         if filter_file_type(file_name):
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], file_name)
+            if os.path.exists(file_path):
+                os.remove(file_path)
             file.save(file_path)
             if file_name.split('.')[-1] == 'zip':
                 app_path = extract_from_zip(file_path)
