@@ -12,6 +12,7 @@ from checker.storage_checker import *
 from checker.keychain_checker import *
 from checker.background_checker import *
 from checker.hotfix_checker import *
+import os, shutil
 
 # Constant
 FA_CPU_TYPE_KEY = 'cputype'
@@ -463,11 +464,12 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, met
         insn_str = hex(cs_insn.address) + '\t' + cs_insn.bytes.hex() + '\t' + cs_insn.mnemonic + '\t' + cs_insn.op_str
         instruction = Instruction(insn_str)
         instruction.address = cs_insn.address
+        basic_block.insert_instruction(instruction)
 
         if cs_insn.id == ARM64_INS_BL or cs_insn.id == ARM64_INS_BLR:  # 函数调用
             operand = cs_insn.operands[0]  # 获得调用的值
             if operand.type != ARM64_OP_IMM:
-                continue
+                print('The operand type is not IMM')
             try:
                 _function = mach_info.functions[hex(operand.imm)]  # 取得调用的函数
             except Exception as e:
@@ -478,7 +480,7 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, met
 
             if function_name == "_objc_msgSendSuper2":  # 调用父类方法
                 handle_super_method(mach_info, class_data, inter, instruction)
-                basic_block.insert_instruction(instruction)
+                # basic_block.insert_instruction(instruction)
 
             elif function_name == "_objc_storeStrong":  # 一些特殊方法
                 reg0_value = inter.gen_regs[0].value
@@ -488,14 +490,14 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, met
             elif function_name == "_objc_msgSend":  # 调用方法
                 # 处理普通方法调用
                 result = handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recurive_stack=r_stack)
-                if result:
-                    basic_block.insert_instruction(instruction)
+                # if result:
+                #     basic_block.insert_instruction(instruction)
             else:
                 result = handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recursive_stack, False, function_name)
                 filtered_functions = {'_objc_msgSendSuper2', '_objc_storeStrong', '_objc_msgSend',
                                       '_objc_retainAutoreleasedReturnValue', '_objc_release'}
-                if result and function_name not in filtered_functions:
-                    basic_block.insert_instruction(instruction)
+                # if result and function_name not in filtered_functions:
+                #     basic_block.insert_instruction(instruction)
 
         elif cs_insn.id == ARM64_INS_B:
             address_op = cs_insn.operands[-1]
@@ -709,7 +711,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
 # Note: if only one arch, just analysis that arch
 
 
-def static_analysis(binary_file, arch=0):
+def static_analysis(binary_file, app_name, arch=0):
 
     global _g_current_context
     # 用来解析动态库
@@ -753,150 +755,263 @@ def static_analysis(binary_file, arch=0):
 
         sorted_slice_addresses = sorted_list_for_hex_string(slice_addresses)
 
-        def cfg_provider(class_name, imp_name):
-            # print(class_name, imp_name)
-            instruction = MethodStorage.get_instructions(class_name, imp_name)
-            if instruction is None:
-                address = mach_info.get_method_address(class_name, imp_name)
-                if address is not None:
-                    method = _disasm_specified_function(arch, mode, mach_info.text, address, mach_info.text_addr, slice_addresses)
-                    # print(method)
-                    instruction = _analyse_method(method, mach_info)
-                    MethodStorage.insert_instructions(instruction)
-                else:
-                    # 在动态库中找方法
-                    dylib_key = '_OBJC_CLASS_$_' + class_name
-                    if dylib_key in mach_info.dylib_frameworks_pair:
-                        dylib_mach_info = mach_info.get_dylib_frameworks(mach_info.dylib_frameworks_pair[dylib_key])
-                        if dylib_mach_info is not None:
-                            dylib_slice_address = list(dylib_mach_info.methods.keys())
-                            dylib_slice_address += list(dylib_mach_info.functions.keys())
-                            address = dylib_mach_info.get_method_address(class_name, imp_name)
-                            if address is not None:
-                                method = _disasm_specified_function(arch, mode, dylib_mach_info.text, address, dylib_mach_info.text_addr, dylib_slice_address)
-                                instruction = _analyse_method(method, dylib_mach_info)
-                                MethodStorage.insert_instructions(instruction)
-            return instruction
-
         print("Start disassemble all methods!")
-        method_hub = MachoMethodHub()
+        method_hub = MachoMethodHub()  # 对于每一个架构都有一个
         methods_hubs.append(method_hub)
         method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr, sorted_slice_addresses, method_hub=method_hub)
         print("Disassemble complete!")
         for method_instruction in method_instructions:
             _analyse_method(method_instruction, mach_info, method_hub=method_hub)
 
-        pasted_method = check_has_paste_board(method_hub)
-        storage_method = check_storage_type(method_hub)
-        background_behaviours = check_enter_background(method_hub)
-        possible_hot_fix_method = check_possible_hot_fix(method_hub)
-        keychain_method = check_access_keychain(method_hub)
+        # pasted_method = check_has_paste_board(method_hub)
+        # storage_method = check_storage_type(method_hub)
+        # background_behaviours = check_enter_background(method_hub)
+        # possible_hot_fix_method = check_possible_hot_fix(method_hub)
+        # keychain_method = check_access_keychain(method_hub)
 
-        print('')
-        # Output the result of analysis
-        print('===================================================')
-        # Output the method read or write paste board
-        read_paste_method = pasted_method['read_paste_board']
-        write_paste_method = pasted_method['write_paste_board']
-        print('Follow methods has read the content from paste board:')
-        for cls, method in read_paste_method:
-            print('\t', cls, method)
-        print('')
-        print('Follow methods has write the content to paste board:')
-        for cls, method in write_paste_method:
-            print('\t', cls, method)
-        print('')
+        def cfg_provider(class_name, imp_name):
+            # print(class_name, imp_name)
+            method_instruction = method_hub.get_method_insn(class_name, imp_name)
+            return method_instruction
 
-        print('===================================================')
-        # Output the method storage
-        print('Follow methods using `UserDefaults` to store data:')
-        for cls, method in storage_method['user_defaults']:
-            print('\t', cls, method)
-        print('')
-        print('Follow methods using `KeyArchived` to store data:')
-        for cls, method in storage_method['key_archived']:
-            print('\t', cls, method)
-        print('')
-        print('Follow methods using `SQLite` to store data:')
-        for cls, method in storage_method['sqlite']:
-            print('\t', cls, method)
-        print('')
-        print('Follow methods using `Core Data` to store data:')
-        for cls, method in storage_method['coredata']:
-            print('\t', cls, method)
-        print('')
+        print('sdfkjdlfjslkjflskdjkl')
+        method_ins = method_hub.get_method_insn('AppDelegate', 'application:didFinishLaunchingWithOptions:')
+        # method_ins = method_hub.get_method_insn('ABKSettingViewController', 'viewDidLoad')
 
-        print('===================================================')
-        # Output the method hotfix
-        print('Follow methods call the `JSContext` method, maybe using `hotfix`:')
-        print('* init JSContext:')
-        for cls, method in possible_hot_fix_method['js_context_init']:
-            print('\t', cls, method)
-        print('* set `OC` behaviour to JSContext: (The detail of behaviour cannot find out currently)')
-        for cls, method in possible_hot_fix_method['js_context_set']:
-            print('\t', cls, method)
-        print('* evaluate JSContext:')
-        for cls, method in possible_hot_fix_method['js_context_evaluate']:
-            print('\t', cls, method)
-        print('')
+        if method_ins is not None:
+            cfg = generate_cfg(method_ins, cfg_provider, True)
+            for b in cfg.all_blocks:
+                print(b.name)
+            print('sdfkjdlfjslkjflskdjkl')
+            cfg.view()
 
-        print('===================================================')
-        # Output the method keychain
-        print('Follow methods has added data to keychain:')
-        for cls, method in keychain_method['add_keychain']:
-            print('\t', cls, method)
-        print('')
-        print('Follow methods has searched data from keychain:')
-        for cls, method in keychain_method['search_keychain']:
-            print('\t', cls, method)
-        print('')
-        print('Follow methods has updated data to keychain:')
-        for cls, method in keychain_method['update_keychain']:
-            print('\t', cls, method)
-        print('')
-        print('Follow methods has deleted data from keychain:')
-        for cls, method in keychain_method['delete_keychain']:
-            print('\t', cls, method)
-        print('')
-
-        print('===================================================')
-        # Output the background behaviour keychain
-        print('Follow methods are the behaviours when the application did/will enter background:')
-        behaviours = background_behaviours['background_behaviours']
-        for key in behaviours:
-            if len(behaviours[key]) > 0:
-                cls, method = key
-                print('* In method `%s` of class `%s`' % (cls, method))
-                for api_cls, api_method in behaviours[key]:
-                    print('\t', api_cls, api_method)
-        print('')
-
-        print('===================================================')
-        # Output the notification
-        print('Follow methods post notification:')
-        for notification in mach_info.notification_poster:
-            print('* %s' % notification)
-            for cls, method in mach_info.notification_poster[notification]:
-                print('\t', cls, method)
-        print('')
-
-        print('Follow methods handle notification:')
-        for notification in mach_info.notification_handler:
-            print('* %s' % notification)
-            for cls, method in mach_info.notification_handler[notification]:
-                print('\t', cls, method)
-
-
-
-
-        # print(storage_method)
+        # (read_paste_board_path, write_paste_board_path,
+        #  ud_storage_path, ka_storage_path, s_storage_path, c_storage_path,
+        #  i_hotfix_path, s_hotfix_path, e_hotfix_path,
+        #  add_keychain_path, delete_keychain_path, update_keychain_path, select_keychain_path,
+        #  background_path,
+        #  poster_notification_path, handler_notification_path) = setup_output_environment(app_name)
         #
-        # print(background_behaviours)
+        # print('')
+        # # Output the result of analysis
+        # print('===================================================')
+        # # Output the method read or write paste board
+        # read_paste_method = pasted_method['read_paste_board']
+        # write_paste_method = pasted_method['write_paste_board']
+        # print('Follow methods has read the content from paste board:')
+        # for cls, method in read_paste_method:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(read_paste_board_path)
+        #     print('\t', cls, method)
+        # print('')
+        # print('Follow methods has write the content to paste board:')
+        # for cls, method in write_paste_method:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(write_paste_board_path)
+        #     print('\t', cls, method)
+        # print('')
         #
-        # print(possible_hot_fix_method)
+        # print('===================================================')
+        # # Output the method storage
+        # print('Follow methods using `UserDefaults` to store data:')
+        # for cls, method in storage_method['user_defaults']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(ud_storage_path)
+        #     print('\t', cls, method)
+        # print('')
+        # print('Follow methods using `KeyArchived` to store data:')
+        # for cls, method in storage_method['key_archived']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(ka_storage_path)
+        #     print('\t', cls, method)
+        # print('')
+        # print('Follow methods using `SQLite` to store data:')
+        # for cls, method in storage_method['sqlite']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(s_storage_path)
+        #     print('\t', cls, method)
+        # print('')
+        # print('Follow methods using `Core Data` to store data:')
+        # for cls, method in storage_method['coredata']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(c_storage_path)
+        #     print('\t', cls, method)
+        # print('')
         #
-        # print(keychain_method)
+        # print('===================================================')
+        # # Output the method hotfix
+        # print('Follow methods call the `JSContext` method, maybe using `hotfix`:')
+        # print('* init JSContext:')
+        # for cls, method in possible_hot_fix_method['js_context_init']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(i_hotfix_path)
+        #     print('\t', cls, method)
+        # print('* set `OC` behaviour to JSContext: (The detail of behaviour cannot find out currently)')
+        # for cls, method in possible_hot_fix_method['js_context_set']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(s_hotfix_path)
+        #     print('\t', cls, method)
+        # print('* evaluate JSContext:')
+        # for cls, method in possible_hot_fix_method['js_context_evaluate']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(e_hotfix_path)
+        #     print('\t', cls, method)
+        # print('')
+        #
+        # print('===================================================')
+        # # Output the method keychain
+        # print('Follow methods has added data to keychain:')
+        # for cls, method in keychain_method['add_keychain']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(add_keychain_path)
+        #     print('\t', cls, method)
+        # print('')
+        # print('Follow methods has searched data from keychain:')
+        # for cls, method in keychain_method['search_keychain']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(select_keychain_path)
+        #     print('\t', cls, method)
+        # print('')
+        # print('Follow methods has updated data to keychain:')
+        # for cls, method in keychain_method['update_keychain']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(update_keychain_path)
+        #     print('\t', cls, method)
+        # print('')
+        # print('Follow methods has deleted data from keychain:')
+        # for cls, method in keychain_method['delete_keychain']:
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(delete_keychain_path)
+        #     print('\t', cls, method)
+        # print('')
+        #
+        # print('===================================================')
+        # # Output the background behaviour
+        # print('Follow methods are the behaviours when the application did/will enter background:')
+        # behaviours = background_behaviours['background_behaviours']
+        # for key in behaviours:
+        #     if len(behaviours[key]) > 0:
+        #         cls, method = key
+        #         method_ins = method_hub.get_method_insn(cls, method)
+        #         if method_ins is not None:
+        #             cfg = generate_cfg(method_ins, cfg_provider, True)
+        #             cfg.save_to(background_path)
+        #         print('* In method `%s` of class `%s`' % (cls, method))
+        #         for api_cls, api_method in behaviours[key]:
+        #             print('\t', api_cls, api_method)
+        # print('')
+        #
+        # print('===================================================')
+        # # Output the notification
+        # print('Follow methods post notification:')
+        # for notification in mach_info.notification_poster:
+        #     print('* %s' % notification)
+        #     for cls, method in mach_info.notification_poster[notification]:
+        #         method_ins = method_hub.get_method_insn(cls, method)
+        #         if method_ins is not None:
+        #             cfg = generate_cfg(method_ins, cfg_provider, True)
+        #             cfg.save_to(poster_notification_path)
+        #         print('\t', cls, method)
+        # print('')
+        #
+        # print('Follow methods handle notification:')
+        # for notification in mach_info.notification_handler:
+        #     print('* %s' % notification)
+        #     for cls, method in mach_info.notification_handler[notification]:
+        #         method_ins = method_hub.get_method_insn(cls, method)
+        #         if method_ins is not None:
+        #             cfg = generate_cfg(method_ins, cfg_provider, True)
+        #             cfg.save_to(handler_notification_path)
+        #         print('\t', cls, method)
 
     mach_o_file.close()
+
+
+def setup_output_environment(app_name):
+    if not os.path.exists('cfgs'):
+        os.mkdir('cfgs')
+
+    if os.path.exists('cfgs/' + app_name):
+        shutil.rmtree('cfgs/' + app_name)
+
+    cfg_path = 'cfgs/' + app_name
+
+    os.mkdir(cfg_path)
+    os.mkdir(cfg_path + '/paste_board')
+    read_paste_board_path = cfg_path + '/paste_board/read'
+    os.mkdir(read_paste_board_path)
+    write_paste_board_path = cfg_path + '/paste_board/write'
+    os.mkdir(write_paste_board_path)
+
+    os.mkdir(cfg_path + '/storage')
+    ud_storage_path = cfg_path + '/storage/user_defaults'
+    os.mkdir(ud_storage_path)
+    ka_storage_path = cfg_path + '/storage/key_archived'
+    os.mkdir(ka_storage_path)
+    s_storage_path = cfg_path + '/storage/sqlite'
+    os.mkdir(s_storage_path)
+    c_storage_path = cfg_path + '/storage/coredata'
+    os.mkdir(c_storage_path)
+
+    os.mkdir(cfg_path + '/hotfix')
+    i_hotfix_path = cfg_path + '/hotfix/init'
+    os.mkdir(i_hotfix_path)
+    s_hotfix_path = cfg_path + '/hotfix/set'
+    os.mkdir(s_hotfix_path)
+    e_hotfix_path = cfg_path + '/hotfix/evaluate'
+    os.mkdir(e_hotfix_path)
+
+    os.mkdir(cfg_path + '/keychain')
+    add_keychain_path = cfg_path + '/keychain/add'
+    os.mkdir(add_keychain_path)
+    delete_keychain_path = cfg_path + '/keychain/delete'
+    os.mkdir(delete_keychain_path)
+    update_keychain_path = cfg_path + '/keychain/update'
+    os.mkdir(update_keychain_path)
+    select_keychain_path = cfg_path + '/keychain/select'
+    os.mkdir(select_keychain_path)
+
+    background_path = cfg_path + '/background'
+    os.mkdir(background_path)
+
+    os.mkdir(cfg_path + '/notification')
+    poster_notification_path = cfg_path + '/notification/poster'
+    os.mkdir(poster_notification_path)
+    handler_notification_path = cfg_path + '/notification/handler'
+    os.mkdir(handler_notification_path)
+
+    return (read_paste_board_path, write_paste_board_path,
+            ud_storage_path, ka_storage_path, s_storage_path, c_storage_path,
+            i_hotfix_path, s_hotfix_path, e_hotfix_path,
+            add_keychain_path, delete_keychain_path, update_keychain_path, select_keychain_path,
+            background_path,
+            poster_notification_path, handler_notification_path)
+
 # Reference:
 # > https://zhuanlan.zhihu.com/p/24858664

@@ -1,4 +1,5 @@
 from graphviz import Digraph, Graph
+import os
 
 CFGNodeTypeFunction = 0
 CFGNodeTypeMethod = 1
@@ -145,7 +146,15 @@ class CFG:
     def view(self):
         graphviz_cfg = Digraph(self.name)
         self.graphviz_obj(graphviz_cfg)
+        # print(graphviz_cfg)
         graphviz_cfg.view()
+
+    def save_to(self, path):
+        graphviz_cfg = Digraph(self.name)
+        self.graphviz_obj(graphviz_cfg)
+        graphviz_cfg.format = 'png'
+        graphviz_cfg.render(os.path.join(path, self.name + 'gv'), view=False)
+
 
 class CFGBlock:
 

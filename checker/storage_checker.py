@@ -75,6 +75,9 @@ def _check_storage_type(method, method_hub, method_cache, recursive_set=set([]))
             continue
 
         for instruction in block.instructions:
+            if instruction.goto_insns is None:
+                continue
+
             class_name, method_name = instruction.goto_insns
             class_method_cache = None
             if class_name in method_cache:

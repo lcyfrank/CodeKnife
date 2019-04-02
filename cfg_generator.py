@@ -1,6 +1,7 @@
 from models.inner_instruction import *
 from models.cfg import *
 
+
 def generate_cfg_block(block, info_provider, class_name, method_name, recursive=False, name_prefix=''):
 
     cfg_blocks = []
@@ -10,6 +11,7 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
 
     for i in range((len(block.instructions))):
         instruction = block.instructions[i]
+
         if cfg_block is None:
             cfg_block = CFGBlock(name_prefix + hex(instruction.address))
             if len(wait_for_follow) > 0:

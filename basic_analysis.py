@@ -138,11 +138,14 @@ if __name__ == '__main__':
         exit(-1)
 
     execute_file = None
-    os.chdir(target_app_path)
-    app_info_plist_path = 'Info.plist'
+    # os.chdir(target_app_path)
+    app_info_plist_path = os.path.join(target_app_path, 'Info.plist')
+    app_name = None
     with open(app_info_plist_path, 'rb') as app_info_plist:
         plist_content = plistlib.load(app_info_plist)
         execute_file = plist_content['CFBundleExecutable']
+        app_name = plist_content['CFBundleName']
 
     if execute_file is not None:
-        static_analysis(execute_file)
+        execute_file_path = os.path.join(target_app_path, execute_file)
+        static_analysis(execute_file_path, app_name)

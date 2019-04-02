@@ -1,4 +1,4 @@
-
+# Contains return type of Objective-C methods
 objc_methods = {
     'UIApplication': {
         'sharedApplication': 'UIApplication'

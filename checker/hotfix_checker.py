@@ -36,6 +36,8 @@ def _check_possible_hot_fix_for_method(method, method_hub, method_cache, recursi
             continue
 
         for instruction in block.instructions:
+            if instruction.goto_insns is None:
+                continue
             class_name, method_name = instruction.goto_insns
             class_method_cache = None
             if class_name in method_cache:

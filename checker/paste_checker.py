@@ -43,6 +43,8 @@ def _check_has_paste_board_for_method(method, method_hub, method_cache, recursiv
             continue
 
         for instruction in block.instructions:
+            if instruction.goto_insns is None:
+                continue
             class_name, method_name = instruction.goto_insns
             class_method_cache = None
             if class_name in method_cache:
