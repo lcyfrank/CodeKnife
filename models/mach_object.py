@@ -5,7 +5,7 @@ from models.mach_o.loader import *
 from models.mach_o.nlist import *
 from models.objc_runtime import *
 from models.class_storage import *
-from models.objc_method import objc_methods
+from models.objc_method import objc_methods_return_type, objc_methods_arguments
 
 SELF_POINTER = -0x1000000
 CURRENT_SELECTOR = -0x2000000
@@ -290,11 +290,11 @@ class MachObject:
                 return _property._type
 
         # 查看系统的方法返回值
-        if _class in objc_methods:
-            class_methods = objc_methods[_class]
+        if _class in objc_methods_return_type:
+            class_methods = objc_methods_return_type[_class]
             if method in class_methods:
                 return class_methods[method]
-        general_methods = objc_methods['*']
+        general_methods = objc_methods_return_type['*']
         if method in general_methods:
             return general_methods[method]
 
@@ -307,9 +307,23 @@ class MachObject:
         return method_type.return_type
 
     # 方法的参数列表
-    def get_arguments_from_methd(self, _class, method):
-
+    def get_arguments_from_method(self, _class, method):
         if (_class, method) not in self.methods_type:
+            if _class in objc_methods_arguments:
+                class_methods = objc_methods_arguments[_class]
+                if method in class_methods:
+                    arguments_type = [ArgumentData('id', 8), ArgumentData('SEL', 8)]
+                    for t, l in class_methods[method]:
+                        argument_type = ArgumentData(t, l)
+                        arguments_type.append(argument_type)
+                    return arguments_type
+            general_methods = objc_methods_arguments['*']
+            if method in general_methods:
+                arguments_type = [ArgumentData('id', 8), ArgumentData('SEL', 8)]
+                for t, l in general_methods[method]:
+                    argument_type = ArgumentData(t, l)
+                    arguments_type.append(argument_type)
+                return arguments_type
             return []
         method_type = self.methods_type[(_class, method)]
         return method_type.arguments_type
@@ -328,8 +342,10 @@ class MachObject:
     def contain_block_arguments(self, _class, method):
         if _class == '$Function' and method == '_dispatch_once':
             return [1], True
+        if _class == '$Function' and method == '_dispatch_after':
+            return [2], True
         if _class == 'UIView' and method == 'animateWithDuration:animations:':
-            return [2], False
+            return [2], True  # Duration 在 float 寄存器中
         return [], False
 
     # 解析 GlobalBlock

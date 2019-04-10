@@ -1,10 +1,53 @@
 import ctypes
-
 from capstone import *
 from capstone.arm64 import *
 
 SELF_POINTER = -0x1000000
 CURRENT_SELECTOR = -0x2000000
+
+
+class ExecuteContext:
+
+    def __init__(self):
+        self.variable_count = 0
+
+        self.data_flow = {}  # var_name: [(from, to)]
+        self.variable_from = {}  # var_name: from
+
+        self.register_variable = {}  # register_name: var_name
+        self.memory_variable = {}  # memory: var_name
+
+    def add_variable(self, reg_name):
+        variable_name = 'var_' + str(self.variable_count)
+        self.variable_count += 1
+        self.register_variable[reg_name] = variable_name
+
+    def add_memory_variable(self, memory):
+        variable_name = 'var_' + str(self.variable_count)
+        self.variable_count += 1
+        self.memory_variable[memory] = variable_name
+
+    def mov_regs(self, src_reg, dst_reg):
+        if src_reg in self.register_variable:
+            self.register_variable[dst_reg] = self.register_variable[src_reg]
+
+    def ldr_memory(self, src_memory, dst_reg):
+        if src_memory in self.memory_variable:
+            self.register_variable[dst_reg] = self.memory_variable[src_memory]
+
+    def str_memory(self, src_reg, dst_memory):
+        if src_reg in self.register_variable:
+            self.memory_variable[dst_memory] = self.register_variable[src_reg]
+
+    def var_from(self, var_name, from_item):  # from_item may be str or Instruction
+        var_index = int(var_name[4:])
+        if var_index < self.variable_count:
+            self.variable_from[var_name] = from_item
+
+    def add_from_to(self, var_name, from_item, to_item, position):  # to_item is Instruction and position is parameter position
+        if var_name not in self.data_flow:
+            self.data_flow[var_name] = []
+        self.data_flow[var_name].append((from_item, to_item, position))
 
 
 class Register:
@@ -41,6 +84,7 @@ class FloatRegister:
     def clear(self):
         self.value = 0
 
+
     # @property
     # def is_memory_content(self):
     #     return False
@@ -54,11 +98,13 @@ InterpreterArch32 = 1
 
 class Interpreter:
 
-    def __init__(self, memory_provider=None, store_notify=None, arch=InterpreterArch64, parameters=[]):
+    def __init__(self, context=None, memory_provider=None, store_notify=None, arch=InterpreterArch64, parameters=[]):
         self.saved_state = {}
 
         self.gen_regs = [Register(i) for i in range(31)]
         self.float_regs = [FloatRegister(i) for i in range(32)]
+
+        self.context: ExecuteContext = context
 
         self.wzr = Register(-1)
         self.xzr = Register(-1)
@@ -85,9 +131,13 @@ class Interpreter:
                 argument_type, length, value = parameters[i]
                 if argument_type == 'int':
                     self.gen_regs[int_count].value = value
+                    self.context.add_variable('gen_' + str(int_count))
+                    self.context.var_from('var_' + str(self.context.variable_count - 1), 'Parameter_' + str(i))
                     int_count += 1
                 else:
                     self.float_regs[float_count].value = value
+                    self.context.add_variable('float_' + str(float_count))
+                    self.context.var_from('var_' + str(self.context.variable_count - 1), 'Parameter_' + str(i))
                     float_count += 1
         else:
             int_count = 0
@@ -96,9 +146,13 @@ class Interpreter:
                 argument_type, length, value = parameters[i]
                 if argument_type == 'int':
                     self.gen_regs[int_count].value = value
+                    self.context.add_variable('gen_' + str(int_count))
+                    self.context.var_from('var_' + str(self.context.variable_count - 1), 'Parameter_' + str(i))
                     int_count += 1
                 else:
                     self.float_regs[float_count].value = value
+                    self.context.add_variable('float_' + str(float_count))
+                    self.context.var_from('var_' + str(self.context.variable_count - 1), 'Parameter_' + str(i))
                     float_count += 1
             # 超过 4/8 个参数存到栈里
             # 先不对齐了
@@ -106,17 +160,13 @@ class Interpreter:
                 argument_type, length, value = parameters[i]
                 if argument_type == 'int':
                     self.memory[hex(self.sp.value)] = value
+                    self.context.add_memory_variable(hex(self.sp.value))
+                    self.context.var_from('var_' + str(self.context.variable_count - 1), 'Parameter_' + str(i))
                     self.sp.value = (self.sp.value - length)
                 else:
                     self.float_regs[float_count].value = value
-
-            # for i in range(len(parameters) - 4):
-                # self.memory[hex()]
-
-        # Jump related
-        # self.compare_flag = 0  # 0 is equal and -1 is small and 1 is bigger
-        # self.should_jump = False
-        # self.jump_address = 0x0
+                    self.context.add_variable('float_' + str(float_count))
+                    self.context.var_from('var_' + str(self.context.variable_count - 1), 'Parameter_' + str(i))
 
     def save_state(self, key):
 
@@ -141,7 +191,9 @@ class Interpreter:
             'pc': self.pc.value,
             'gen_regs': gen_regs_state,
             'float_regs': float_regs_state,
-            'condition_flag': self.condition_flag
+            'condition_flag': self.condition_flag,
+            'context': self.context.register_variable.copy(),
+            'memory_context': self.context.memory_variable.copy()
         }
         self.saved_state[key] = state
 
@@ -165,6 +217,8 @@ class Interpreter:
                 index = self.float_regs.index(reg)
                 reg.value = state['float_regs'][index]
             self.condition_flag = state['condition_flag']
+            self.context.register_variable = state['context'].copy()
+            self.context.memory_variable = state['memory_context'].copy()
         else:
             print('Do not contain state of key:', key)
 
@@ -174,6 +228,12 @@ class Interpreter:
         if reg.isdigit():
             reg_index = int(reg)
             self.gen_regs[reg_index].value = value
+            # 修改了寄存器的值之后，同时要把对应的变量给删掉
+            if 'gen_' + reg in self.context.register_variable:
+                # if self.context.register_variable['gen_' + reg] in self.context.variable_from:
+                #     del self.context.variable_from[self.context.register_variable['gen_' + reg]]
+                del self.context.register_variable['gen_' + reg]
+
 
     def modify_memory(self, address, value):
         self.memory[hex(address)] = value
@@ -354,6 +414,7 @@ class Interpreter:
                                z)
         self.tracking['condition'] = tracking
 
+    # 还没有处理 orr/and/add/sub 四个运算
     def handle_orr(self, insn):
         tracking = []
         result = 0
@@ -409,7 +470,21 @@ class Interpreter:
             source_register = self.get_register(insn.reg_name(source.reg))
             source_value = source_register.value
             tracking.append(insn.reg_name(source.reg))
-            # dest_register.is_memory_content = source_register.is_memory_content
+
+            if type(source_register) == Register:
+                if source_register in self.gen_regs:
+                    context_src_register = 'gen_' + str(self.gen_regs.index(source_register))
+                else:
+                    context_src_register = 'gen_' + insn.reg_name(source.reg)
+            else:
+                context_src_register = 'float_' + str(self.float_regs.index(source_register))
+            if context_src_register in self.context.register_variable:
+                context_dst_register = None
+                if type(dest_register) == Register:
+                    context_dst_register = 'gen_' + str(self.gen_regs.index(dest_register))
+                else:
+                    context_dst_register = 'float_' + str(self.float_regs.index(dest_register))
+                self.context.mov_regs(context_src_register, context_dst_register)
         dest_register.value = source_value
         self.tracking[dest_register_name] = tracking
 
@@ -442,22 +517,30 @@ class Interpreter:
                     register.value = memory_value
                 else:
                     if self.memory_provider != None:
-                        memory_value = self.memory_provider(memory + j * 4)
+                        memory_value = self.memory_provider(memory + j * length)
                     else:
                         memory_value = 0
                     wrap = 0xff
                     for i in range(1, length):
                         wrap = (wrap << 8) + 0xff
                     memory_value = memory_value & wrap
-                    self.memory[hex(memory + j * 4)] = memory_value
-                    # register.is_memory_content = False
-                    register.value = self.memory[hex(memory + j * 4)]
+                    self.memory[hex(memory + j * length)] = memory_value
+                    register.value = self.memory[hex(memory + j * length)]
+
+                if type(register) == Register:
+                    if register in self.gen_regs:
+                        context_register = 'gen_' + str(self.gen_regs.index(register))
+                    else:
+                        context_register = 'gen_' + insn.reg_name(operand.reg)
+                else:
+                    context_register = 'float_' + str(self.float_regs.index(register))
+                self.context.ldr_memory(hex(memory + j * length), context_register)
                 self.tracking[reg_name] = tracking
 
     def handle_load_pair(self, insn):
         self.handle_load_register(insn)
 
-    def handle_store_register(self, insn):
+    def handle_store_register(self, insn, length=8):
         memory_operand = insn.operands[-1].mem
         memory_reg_name = insn.reg_name(memory_operand.base)
         if memory_reg_name is None:
@@ -474,10 +557,20 @@ class Interpreter:
             if operand.type == ARM64_OP_REG:
                 reg_name = insn.reg_name(operand.reg)
                 register = self.get_register(reg_name)
-                self.memory[hex(memory + j * 8)] = register.value
-                self.tracking['[' + str(memory + j * 8) + ']'] = [reg_name]
+
+                if type(register) == Register:
+                    if register in self.gen_regs:
+                        context_register = 'gen_' + str(self.gen_regs.index(register))
+                    else:
+                        context_register = 'gen_' + insn.reg_name(operand.reg)
+                else:
+                    context_register = 'float_' + str(self.float_regs.index(register))
+                self.context.str_memory(context_register, hex(memory + j * length))
+
+                self.memory[hex(memory + j * length)] = register.value
+                self.tracking['[' + str(memory + j * length) + ']'] = [reg_name]
                 if self.store_notify is not None:
-                    self.store_notify(hex(memory + j * 8), register.value)
+                    self.store_notify(hex(memory + j * length), register.value)
 
     def handle_store_pair(self, insn):
         self.handle_store_register(insn)

@@ -57,7 +57,7 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
                     for _, oc_block in instruction.block_data:
                         oc_block_imp = info_provider('$Block', oc_block)
                         if oc_block_imp is not None:
-                            oc_block_cfg = generate_cfg(oc_block_imp, info_provider, True)
+                            oc_block_cfg = generate_cfg(oc_block_imp, info_provider, False)
                             cfg_node.oc_blocks.append(oc_block_cfg)
             else:
                 # print(basic_info, imp_name)

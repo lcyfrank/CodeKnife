@@ -28,6 +28,7 @@ methods_hubs = []  # [method_hub]
 
 
 def _disasm_specified_function(arch, mode, machine_code, address, base_address, slice_address):
+    slice_address = set(slice_address)  # 使用 set，加快查询速度
     code = machine_code[address - base_address:]
     current_function = []
 
@@ -253,9 +254,7 @@ def get_obj_name(mach_info, value, class_name, class_data):
 
 
 def handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recurive_stack=None, method=True, function_name=None):
-
     global _g_current_context
-
     if recurive_stack is not None:
         r_stack = recurive_stack.copy()
     else:
@@ -263,12 +262,14 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
 
     if method:
         # !!!!!!
-        if class_data is None:  # 分类
-            class_name = '$Function'
+        if class_data is None:  # 分类或者 Block
+            class_name = None
+            # 分类中的方法，再说
         else:
             class_name = class_data.name
         reg0_value = inter.gen_regs[0].value
         reg1_value = inter.gen_regs[1].value
+        # 从寄存器中获得方法的调用者
         caller_name = get_obj_name(mach_info, reg0_value, class_name, class_data)
         try:
             meth_name = mach_info.symbols[hex(reg1_value)]
@@ -276,7 +277,7 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
             # print("Some error happens during analysis in get value in register 1 (Method)")
             # print(str(e))
             return False
-
+        # 处理 Objective-C 中的方法调用相关内容
         # Handle Notification
         if caller_name == 'NSNotificationCenter' and meth_name == 'addObserver:selector:name:object:':
             observer = get_obj_name(mach_info, inter.gen_regs[2].value, class_name, class_data)
@@ -304,12 +305,45 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
                 notification = 'Unknown'
             mach_info.post_notification(notification, class_name, method_name)
 
+        # 处理方法中的参数
+        method_arguments = mach_info.get_arguments_from_method(caller_name, meth_name)
+        for i in range(0, len(method_arguments)):
+            argument_type = method_arguments[i].type
+            argument = None
+            if argument_type == 'id' or argument_type == 'Class' or argument_type == 'SEL' or argument_type == 'Pointer':
+                argument = 'int'
+            elif argument_type == 'Float':
+                argument = 'float'
+            elif argument_type == 'Char' or argument_type == 'Integer' or argument_type == 'Bool':
+                argument = 'int'
+
+            if argument is None:  # 默认参数为 int 类型
+                argument = 'int'
+
+            # 作为参数的时候
+            # 从上下文中提取数据变量，来生成数据流依赖
+            if argument == 'int':
+                context_reg_name = 'gen_' + str(i)
+            else:
+                context_reg_name = 'float_' + str(i)
+            if context_reg_name in inter.context.register_variable:
+                var_name = inter.context.register_variable[context_reg_name]
+                # if meth_name == 'addSubview:':
+                #     print('======')
+                #     print(inter.context.register_variable)
+                #     print(context_reg_name)
+                #     print(var_name)
+                #     print('======')
+                from_item = inter.context.variable_from[var_name]
+                inter.context.add_from_to(var_name, from_item, instruction, i)
+
     else:
         caller_name = '$Function'
         meth_name = function_name
 
     # 处理参数中的 Block
     block_arguments, call_it = mach_info.contain_block_arguments(caller_name, meth_name)
+
     if len(block_arguments) > 0:
         for index in block_arguments:
             block_value = inter.gen_regs[index].value
@@ -327,6 +361,14 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
                                 block_instruction = method_hub.get_cs_insn(hex(method_address))
                                 if block_instruction is not None:
                                     _analyse_method(block_instruction, mach_info, method_hub, recursive_stack=r_stack)
+                                else:  # 未分析过的 Block 在 MethodHub 中提取不到
+                                    arch, mode = _g_current_context
+                                    slice_address = list(mach_info.methods.keys())
+                                    slice_address += list(mach_info.functions.keys())
+                                    block_instruction = _disasm_specified_function(arch, mode, mach_info.text, method_address, mach_info.text_addr, slice_address)
+                                    method_hub.insert_cs_insn(block_instruction)
+                                    _analyse_method(block_instruction, mach_info, method_hub, recursive_stack=r_stack)
+
             else:  # Stack block
                 dylib_name = mach_info.symbols[hex(inter.memory[hex(block_value)])]
                 if dylib_name == '__NSConcreteStackBlock':
@@ -345,7 +387,13 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
                                     block_instruction = method_hub.get_cs_insn(hex(method_address))
                                     if block_instruction is not None:
                                         _analyse_method(block_instruction, mach_info, method_hub, recursive_stack=r_stack)
-
+                                else:
+                                    arch, mode = _g_current_context
+                                    slice_address = list(mach_info.methods.keys())
+                                    slice_address += list(mach_info.functions.keys())
+                                    block_instruction = _disasm_specified_function(arch, mode, mach_info.text, block_data.invoke, mach_info.text_addr, slice_address)
+                                    method_hub.insert_cs_insn(block_instruction)
+                                    _analyse_method(block_instruction, mach_info, method_hub, recursive_stack=r_stack)
     # 处理返回值
     # 递归调用方法
     method_insn = method_hub.get_method_insn(caller_name, meth_name)
@@ -371,7 +419,9 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
                 else:
                     arch, mode = _g_current_context
 
+                    # 根据所有 key 确定分隔地址
                     slice_address = list(mach_info.methods.keys())
+
                     slice_address += list(mach_info.functions.keys())
                     goto_instruction = _disasm_specified_function(arch, mode, mach_info.text, method_address,
                                                                   mach_info.text_addr, slice_address)
@@ -417,9 +467,12 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
     if return_type == '$SELF':
         return_type = caller_name
 
+    # 作为返回值的时候
     if not return_type == 'None':
         _g_return_types.append(return_type)
         inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
+        inter.context.add_variable('gen_0')  # 存储返回值
+        inter.context.var_from('var_' + str(inter.context.variable_count - 1), instruction)
 
     instruction.goto(caller_name, meth_name)  # ！！！！！！！！！！！！！
     return True
@@ -438,28 +491,59 @@ def handle_super_method(mach_info, class_data, inter, instruction):
         class_name = class_data.name
         return_type = mach_info.get_return_type_from_method(class_data.super, meth_name)
 
+    method_arguments = mach_info.get_arguments_from_method(class_name, meth_name)
+    for i in range(0, len(method_arguments)):
+        argument_type = method_arguments[i].type
+        argument = None
+        if argument_type == 'id' or argument_type == 'Class' or argument_type == 'SEL' or argument_type == 'Pointer':
+            argument = 'int'
+        elif argument_type == 'Float':
+            argument = 'float'
+        elif argument_type == 'Char' or argument_type == 'Integer' or argument_type == 'Bool':
+            argument = 'int'
+        if argument is None:  # 默认先预设 int 类型的参数
+            argument = 'int'
+
+        # 作为参数的时候
+        # 从上下文中提取数据变量，来生成数据流依赖
+        if argument == 'int':
+            context_reg_name = 'gen_' + str(i)
+        else:
+            context_reg_name = 'float_' + str(i)
+
+        if context_reg_name in inter.context.register_variable:
+            var_name = inter.context.register_variable[context_reg_name]  # 获得变量名
+            from_item = inter.context.variable_from[var_name]  # from_item 可能是字符串或者 Instruction 类型
+            to_item = instruction
+            inter.context.add_from_to(var_name, from_item, to_item, i)
+
     if return_type == '$SELF':
         return_type = class_name
 
+    # 作为返回值的时候
     if not return_type == 'None':  # 返回值不为空
         _g_return_types.append(return_type)
         inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
 
+        inter.context.add_variable('gen_0')  # 存储返回值
+        inter.context.var_from('var_' + str(inter.context.variable_count - 1), instruction)
+
     instruction.goto(class_name, meth_name)
 
 
-def _analyse_basic_block(block_instruction, identify, mach_info, class_data, method_name, inter, add_range, method_hub=None, recursive_stack=set([])):
+def _analyse_basic_block(block_instruction, identify, mach_info, class_data, method_name, inter: Interpreter, add_range, method_hub=None, recursive_stack=set([])):
     r_stack = recursive_stack.copy()
-    # if class_data is None:
-    #     class_name = '$Function'
-    # else:
-    #     class_name = class_data.name
 
     basic_block = MethodBasicBlockInstructions(identify)
     for i in range(len(block_instruction)):
         cs_insn = block_instruction[i]
         inter.interpret_code(block_instruction, begin=i, end=i+1)  # 执行当前语句
-
+        # if cs_insn.address == 0x10002f998:
+        #     ctx = inter.context
+        #     print(ctx.data_flow)
+        #     print(ctx.variable_from)
+        #     print(ctx.register_variable)
+        #     print(ctx.memory_variable)
         # 生成语句
         insn_str = hex(cs_insn.address) + '\t' + cs_insn.bytes.hex() + '\t' + cs_insn.mnemonic + '\t' + cs_insn.op_str
         instruction = Instruction(insn_str)
@@ -569,10 +653,8 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
         arguments = []
     elif class_name == '$Block':
         arguments = []
-        pass
     else:
-        method_arguments = mach_info.get_arguments_from_methd(class_name, method_name)
-
+        method_arguments = mach_info.get_arguments_from_method(class_name, method_name)
         # 传入解释器的参数类型（float, int）
         # 传入解释器的参数(type, length, value)
         arguments = [('int', 8, SELF_POINTER), ('int', 8, CURRENT_SELECTOR)]
@@ -580,7 +662,6 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
             for i in range(2, len(method_arguments)):
                 argument_type = method_arguments[i].type
                 length = method_arguments[i].length
-
                 argument = None
                 if argument_type == 'id' or argument_type == 'Class' or argument_type == 'SEL' or argument_type == 'Pointer':
                     argument = ('int', length, SELF_POINTER - i + 1)
@@ -594,8 +675,10 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
     method_instructions = method_hub.get_method_insn(class_name, method_name)
     if method_instructions is not None:
         return method_instructions
+
     # 构造一个解释器
-    inter = Interpreter(memory_provider, store_notify=store_notify, parameters=arguments)
+    ctx = ExecuteContext()
+    inter = Interpreter(memory_provider=memory_provider, context=ctx, store_notify=store_notify, parameters=arguments)
     print('Current analyse <%s: %s>' % (class_name, method_name))
     r_stack.add((class_name, method_name))
 
@@ -659,7 +742,6 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
         block = _analyse_basic_block(block_instructions, hex(block_instructions[0].address),
                                      mach_info, class_data, method_name, inter, (method[0].address, method[-1].address), method_hub, r_stack)
         method_instructions.all_blocks[block.identify] = block
-
         # 执行完毕，获取其后续块（跳转过去的块或者下一个块）
         if not block.is_return and (block.jump_to_block is None or
                                    (block.jump_to_block is not None and block.jump_condition is not None)):
@@ -673,13 +755,11 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
                     follow_count += 1
 
                     block.next_block = next_block_address_key
-
         if block.jump_to_block is not None and block.jump_to_block in basic_blocks_instructions:
             jump_to_block_instructions = basic_blocks_instructions[block.jump_to_block]
             blocks_instructions_queue.append(jump_to_block_instructions)  # 入队列
             blocks_instructions_index_queue.append(basic_blocks_keys.index(block.jump_to_block))
             follow_count += 1
-
         if follow_count > 0:  # 这个块有后续的块
             wait_for_follow_queue.append(block)
             wait_for_follow_count_queue.append(follow_count)
@@ -702,6 +782,28 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
         return_types_str.append(return_type)
     method_instructions.return_type = return_types_str
     method_hub.insert_method_insn(method_instructions)
+    # print(method_name)
+    # for var in ctx.data_flow:
+    #     for from_item, to_item, position in ctx.data_flow[var]:
+    #         cls, mtd = to_item.goto_insns
+    #         to_str = cls + ': ' + mtd
+    #         if type(from_item) == str:
+    #             print('\t%s -> (%s %d)' % (from_item, to_str, position))
+    #         else:
+    #             cls, mtd = from_item.goto_insns
+    #             from_str = cls + ': ' + mtd
+    #             print('\t%s -> (%s %d)' % (from_str, to_str, position))
+
+    for data_var in ctx.data_flow:
+        for from_item, to_item, position in ctx.data_flow[data_var]:
+            if type(from_item) == str:
+                method_instructions.add_data_flow_from_parameter(from_item, to_item, position)
+            else:
+                method_instructions.add_data_flow_from_instruction(from_item, to_item, position)
+
+    # print(ctx.variable_from)
+    # print(ctx.register_variable)
+    # print(ctx.memory_variable)
     return method_instructions
 
 
@@ -709,11 +811,10 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
 # 1 means 32-bit
 # 2 means both
 # Note: if only one arch, just analysis that arch
-
-
 def static_analysis(binary_file, app_name, arch=0):
 
     global _g_current_context
+
     # 用来解析动态库
     def macho_file_provider(file_path):
         if '/' in binary_file:
@@ -763,48 +864,63 @@ def static_analysis(binary_file, app_name, arch=0):
         for method_instruction in method_instructions:
             _analyse_method(method_instruction, mach_info, method_hub=method_hub)
 
-        # pasted_method = check_has_paste_board(method_hub)
-        # storage_method = check_storage_type(method_hub)
-        # background_behaviours = check_enter_background(method_hub)
-        # possible_hot_fix_method = check_possible_hot_fix(method_hub)
-        # keychain_method = check_access_keychain(method_hub)
+        pasted_method = check_has_paste_board(method_hub)
+        storage_method = check_storage_type(method_hub)
+        background_behaviours = check_enter_background(method_hub)
+        possible_hot_fix_method = check_possible_hot_fix(method_hub)
+        keychain_method = check_access_keychain(method_hub)
 
-        def cfg_provider(class_name, imp_name):
-            # print(class_name, imp_name)
-            method_instruction = method_hub.get_method_insn(class_name, imp_name)
-            return method_instruction
+        # address = mach_info.get_method_address('ABKModelManager', 'manager')
+        # address = mach_info.get_method_address('ABKTipView', 'showWarningWithText:toView:withDuration:')
+        # address = mach_info.get_method_address('ABKTipView', 'showText:toView:')
+        # address = mach_info.get_method_address('ABKTipView', 'showText:toView:')
+        # m = _disasm_specified_function(arch, mode, mach_info.text, address, mach_info.text_addr, sorted_slice_addresses)
+        # method_instruction = _analyse_method(m, mach_info, method_hub=method_hub)
+        # for from_item in method_instruction.data_flows:
+        #     data_flow: MethodDataFlow = method_instruction.data_flows[from_item]
+        #     data_flow.describe()
 
-        print('sdfkjdlfjslkjflskdjkl')
-        method_ins = method_hub.get_method_insn('AppDelegate', 'application:didFinishLaunchingWithOptions:')
-        # method_ins = method_hub.get_method_insn('ABKSettingViewController', 'viewDidLoad')
+        # def cfg_provider(class_name, imp_name):
+        #     # print(class_name, imp_name)
+        #     method_instruction = method_hub.get_method_insn(class_name, imp_name)
+        #     return method_instruction
+        # cfg = generate_cfg(method_instruction, cfg_provider, False)
+        # cfg.view()
 
-        if method_ins is not None:
-            cfg = generate_cfg(method_ins, cfg_provider, True)
-            for b in cfg.all_blocks:
-                print(b.name)
-            print('sdfkjdlfjslkjflskdjkl')
-            cfg.view()
+        # method_ins = method_hub.get_method_insn('AppDelegate', 'application:didFinishLaunchingWithOptions:')
+        # method_ins = method_hub.get_method_insn('ABKModelManager', 'queryItemsFromSQLiteWithConditions:ordered:orderKey:')
+        # method_ins = method_hub.get_method_insn('ABKModelManager', 'queryItemsFromSQLiteWithStatements:')
 
-        # (read_paste_board_path, write_paste_board_path,
-        #  ud_storage_path, ka_storage_path, s_storage_path, c_storage_path,
-        #  i_hotfix_path, s_hotfix_path, e_hotfix_path,
-        #  add_keychain_path, delete_keychain_path, update_keychain_path, select_keychain_path,
-        #  background_path,
-        #  poster_notification_path, handler_notification_path) = setup_output_environment(app_name)
-        #
-        # print('')
-        # # Output the result of analysis
-        # print('===================================================')
-        # # Output the method read or write paste board
-        # read_paste_method = pasted_method['read_paste_board']
-        # write_paste_method = pasted_method['write_paste_board']
-        # print('Follow methods has read the content from paste board:')
-        # for cls, method in read_paste_method:
-        #     method_ins = method_hub.get_method_insn(cls, method)
+        # if method_ins is not None:
+        #     cfg = generate_cfg(method_ins, cfg_provider, True)
+        #     for b in cfg.all_blocks:
+        #         print(b.name)
+        #     cfg.view()
+
+        (read_paste_board_path, write_paste_board_path,
+         ud_storage_path, ka_storage_path, s_storage_path, c_storage_path,
+         i_hotfix_path, s_hotfix_path, e_hotfix_path,
+         add_keychain_path, delete_keychain_path, update_keychain_path, select_keychain_path,
+         background_path,
+         poster_notification_path, handler_notification_path) = setup_output_environment(app_name)
+
+        print('')
+        # Output the result of analysis
+        print('===================================================')
+        # Output the method read or write paste board
+        read_paste_method = pasted_method['read_paste_board']
+        write_paste_method = pasted_method['write_paste_board']
+        print('Follow methods has read the content from paste board:')
+        for cls, method in read_paste_method:
+
         #     if method_ins is not None:
         #         cfg = generate_cfg(method_ins, cfg_provider, True)
         #         cfg.save_to(read_paste_board_path)
-        #     print('\t', cls, method)
+            print('\t', cls, method)
+            method_ins = method_hub.get_method_insn(cls, method)
+            for from_item in method_ins.data_flows:
+                data_flow: MethodDataFlow = method_ins.data_flows[from_item]
+                data_flow.describe()
         # print('')
         # print('Follow methods has write the content to paste board:')
         # for cls, method in write_paste_method:
