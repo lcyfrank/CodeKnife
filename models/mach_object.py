@@ -889,18 +889,8 @@ class MachObject:
                     else:
                         objc_method = ObjcMethod.parse_from_bytes(om_bytes)
                     objc_method_implementation = objc_method.implementation
-                    # print('asdfsadsdfsadfsdafsfsafdsafsfsfsfassfsd')
-                    # print(hex(om_bytes_begin), hex(om_bytes_end), om_bytes.hex())
-                    # print(hex(objc_method.name))
 
                     objc_method_name = self.symbols[hex(objc_method.name)]
-                    # print('dakfljsadlkfjsdaklf')
-                    # print(objc_method_name)
-                    # print('dalskfskldhfkldjsahfklsa')
-
-                    # print(hex(objc_method.name))
-                    # print(objc_method_name)
-                    # print(self.symbols[hex(objc_method.name)])
 
                     objc_method_signature = self.symbols[hex(objc_method.signature)]
                     # 获得方法返回值和参数

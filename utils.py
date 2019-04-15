@@ -49,12 +49,12 @@ def uleb128(_bytes, offset=0x0):
             result |= (slice << bit)
             bit += 7
 
-        if (p & 0x80 == 0):
+        if p & 0x80 == 0:  # 最高位是 0，则结束
             break
         offset += 1
         p = _bytes[offset]
     result = ctypes.c_int64(result).value
-    return (result, offset - start)
+    return result, offset - start
 
 
 def sorted_list_for_hex_string(l):
