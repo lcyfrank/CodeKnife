@@ -1,7 +1,7 @@
 from models.macho_method_hub import *
 
 
-def _check_enter_background_for_method(method, method_hub, method_cache, recursive_set=set([])):
+def _check_enter_background_for_method(method, method_hub, method_cache, recursive_set=set([]), verbose=False):
 
     recursive_set.add(method)
 
@@ -27,7 +27,8 @@ def _check_enter_background_for_method(method, method_hub, method_cache, recursi
             if class_name in method_cache:
                 class_method_cache = method_cache[class_name]
 
-            print('\tgoto:', class_name, method_name)
+            if verbose:
+                print('\tgoto:', class_name, method_name)
             called_method = method_hub.get_method_insn(class_name, method_name)
             if called_method is not None:
                 if class_method_cache is not None and method_name in class_method_cache:  # Already
@@ -37,7 +38,7 @@ def _check_enter_background_for_method(method, method_hub, method_cache, recursi
                     if called_method in recursive_set:
                         continue
                     else:
-                        apis = _check_enter_background_for_method(called_method, method_hub, method_cache, recursive_set.copy())
+                        apis = _check_enter_background_for_method(called_method, method_hub, method_cache, recursive_set.copy(), verbose)
                         called_apis += apis
                         if class_name not in method_cache:
                             method_cache[class_name] = {}
@@ -70,7 +71,7 @@ def _check_enter_background_for_method(method, method_hub, method_cache, recursi
     return called_apis
 
 
-def check_enter_background(method_hub):
+def check_enter_background(method_hub, verbose=False):
 
     print('Start checking enter background behaviour...')
 
@@ -84,7 +85,8 @@ def check_enter_background(method_hub):
     }
 
     for class_key in method_hub.method_insns:  # 这样遍历字典速度比较快
-        print(class_key + ':')
+        if verbose:
+            print(class_key + ':')
 
         class_method_cache = None
         if class_key in method_cache:
@@ -97,7 +99,7 @@ def check_enter_background(method_hub):
             if class_method_cache is not None and method.method_name in class_method_cache:  # 这个方法之前分析过了
                 continue
             else:
-                behaviours = _check_enter_background_for_method(method, method_hub, method_cache)
+                behaviours = _check_enter_background_for_method(method, method_hub, method_cache, verbose=verbose)
                 enter_background_behaviours[(class_key, method.method_name)] = behaviours
                 if class_key not in method_cache:
                     method_cache[class_key] = {}

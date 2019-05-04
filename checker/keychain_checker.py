@@ -1,7 +1,7 @@
 from models.macho_method_hub import *
 
 
-def _check_access_keychain_for_method(method, method_hub, method_cache, recursive_set=set([])):
+def _check_access_keychain_for_method(method, method_hub, method_cache, recursive_set=set([]), verbose=False):
 
     recursive_set.add(method)
 
@@ -46,7 +46,8 @@ def _check_access_keychain_for_method(method, method_hub, method_cache, recursiv
             if class_name in method_cache:
                 class_method_cache = method_cache[class_name]
 
-            print('\tgoto:', class_name, method_name)
+            if verbose:
+                print('\tgoto:', class_name, method_name)
             called_method = method_hub.get_method_insn(class_name, method_name)
             if called_method is not None:
                 if class_method_cache is not None and method_name in class_method_cache:  # Already
@@ -59,7 +60,7 @@ def _check_access_keychain_for_method(method, method_hub, method_cache, recursiv
                     if called_method in recursive_set:
                         continue
                     else:
-                        a, s, u, d = _check_access_keychain_for_method(called_method, method_hub, method_cache, recursive_set.copy())
+                        a, s, u, d = _check_access_keychain_for_method(called_method, method_hub, method_cache, recursive_set.copy(), verbose)
                         k_keychain_add |= a
                         k_keychain_search |= s
                         k_keychain_update |= u
@@ -102,7 +103,7 @@ def _check_access_keychain_for_method(method, method_hub, method_cache, recursiv
     return k_keychain_add, k_keychain_search, k_keychain_update, k_keychain_delete
 
 
-def check_access_keychain(method_hub):
+def check_access_keychain(method_hub, verbose=False):
     print('Start checking access keychain...')
 
     keychain_add = []
@@ -113,7 +114,8 @@ def check_access_keychain(method_hub):
     method_cache = {}  # 使用 dict 存储结果 {class : {method_name: (0, 0, 0, 0)}}
 
     for class_key in method_hub.method_insns:  # 这样遍历字典速度比较快
-        print(class_key + ':')
+        if verbose:
+            print(class_key + ':')
 
         class_method_cache = None
         if class_key in method_cache:
@@ -124,7 +126,7 @@ def check_access_keychain(method_hub):
             if class_method_cache is not None and method.method_name in class_method_cache:  # 这个方法之前分析过了
                 continue
             else:
-                a, s, u, d = _check_access_keychain_for_method(method, method_hub, method_cache)
+                a, s, u, d = _check_access_keychain_for_method(method, method_hub, method_cache, verbose=verbose)
                 if class_key not in method_cache:
                     method_cache[class_key] = {}
                 method_cache[class_key][method.method_name] = (a, s, u, d)
