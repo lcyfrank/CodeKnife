@@ -30,14 +30,23 @@ class ExecuteContext:
     def mov_regs(self, src_reg, dst_reg):
         if src_reg in self.register_variable:
             self.register_variable[dst_reg] = self.register_variable[src_reg]
+        else:
+            if dst_reg in self.register_variable:
+                del self.register_variable[dst_reg]
 
     def ldr_memory(self, src_memory, dst_reg):
         if src_memory in self.memory_variable:
             self.register_variable[dst_reg] = self.memory_variable[src_memory]
+        else:
+            if dst_reg in self.register_variable:
+                del self.register_variable[dst_reg]
 
     def str_memory(self, src_reg, dst_memory):
         if src_reg in self.register_variable:
             self.memory_variable[dst_memory] = self.register_variable[src_reg]
+        else:
+            if dst_memory in self.memory_variable:
+                del self.memory_variable[dst_memory]
 
     def var_from(self, var_name, from_item):  # from_item may be str or Instruction
         var_index = int(var_name[4:])

@@ -25,3 +25,8 @@ class MachoMethodHub:
                 if method.method_name == method_name:
                     return method
         return None
+
+    def list_all_methods(self):
+        for cls in self.method_insns:
+            for m in self.method_insns[cls]:
+                print(cls + ' ' + m.method_name)

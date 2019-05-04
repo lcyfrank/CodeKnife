@@ -253,7 +253,7 @@ def get_obj_name(mach_info, value, class_name, class_data):
     return 'id'
 
 
-def handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recurive_stack=None, method=True, function_name=None):
+def handle_method_call(mach_info, class_data, class_name, method_name, inter, method_hub, instruction, recurive_stack=None, method=True, function_name=None):
     global _g_current_context
     if recurive_stack is not None:
         r_stack = recurive_stack.copy()
@@ -263,7 +263,7 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
     if method:
         # !!!!!!
         if class_data is None:  # 分类或者 Block
-            class_name = None
+            pass
             # 分类中的方法，再说
         else:
             class_name = class_data.name
@@ -308,6 +308,8 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
         # 处理方法中的参数
         method_arguments = mach_info.get_arguments_from_method(caller_name, meth_name)
         for i in range(0, len(method_arguments)):
+            # if i == 1:
+            #     continue
             argument_type = method_arguments[i].type
             argument = None
             if argument_type == 'id' or argument_type == 'Class' or argument_type == 'SEL' or argument_type == 'Pointer':
@@ -328,6 +330,8 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
                 context_reg_name = 'float_' + str(i)
             if context_reg_name in inter.context.register_variable:
                 var_name = inter.context.register_variable[context_reg_name]
+                print(method_name)
+                print(meth_name)
                 # if meth_name == 'addSubview:':
                 #     print('======')
                 #     print(inter.context.register_variable)
@@ -335,6 +339,7 @@ def handle_method_call(mach_info, class_data, method_name, inter, method_hub, in
                 #     print(var_name)
                 #     print('======')
                 from_item = inter.context.variable_from[var_name]
+                print('position: ' + str(i))
                 inter.context.add_from_to(var_name, from_item, instruction, i)
 
     else:
@@ -531,7 +536,7 @@ def handle_super_method(mach_info, class_data, inter, instruction):
     instruction.goto(class_name, meth_name)
 
 
-def _analyse_basic_block(block_instruction, identify, mach_info, class_data, method_name, inter: Interpreter, add_range, method_hub=None, recursive_stack=set([])):
+def _analyse_basic_block(block_instruction, identify, mach_info, class_data, class_name, method_name, inter: Interpreter, add_range, method_hub=None, recursive_stack=set([])):
     r_stack = recursive_stack.copy()
 
     basic_block = MethodBasicBlockInstructions(identify)
@@ -573,11 +578,11 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, met
 
             elif function_name == "_objc_msgSend":  # 调用方法
                 # 处理普通方法调用
-                result = handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recurive_stack=r_stack)
+                result = handle_method_call(mach_info, class_data, class_name, method_name, inter, method_hub, instruction, recurive_stack=r_stack)
                 # if result:
                 #     basic_block.insert_instruction(instruction)
             else:
-                result = handle_method_call(mach_info, class_data, method_name, inter, method_hub, instruction, recursive_stack, False, function_name)
+                result = handle_method_call(mach_info, class_data, class_name, method_name, inter, method_hub, instruction, recursive_stack, False, function_name)
                 filtered_functions = {'_objc_msgSendSuper2', '_objc_storeStrong', '_objc_msgSend',
                                       '_objc_retainAutoreleasedReturnValue', '_objc_release'}
                 # if result and function_name not in filtered_functions:
@@ -677,7 +682,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
         return method_instructions
 
     # 构造一个解释器
-    ctx = ExecuteContext()
+    ctx = ExecuteContext()  # 构造一个上下文
     inter = Interpreter(memory_provider=memory_provider, context=ctx, store_notify=store_notify, parameters=arguments)
     print('Current analyse <%s: %s>' % (class_name, method_name))
     r_stack.add((class_name, method_name))
@@ -740,7 +745,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
 
         # 模拟执行这个基本块
         block = _analyse_basic_block(block_instructions, hex(block_instructions[0].address),
-                                     mach_info, class_data, method_name, inter, (method[0].address, method[-1].address), method_hub, r_stack)
+                                     mach_info, class_data, class_name, method_name, inter, (method[0].address, method[-1].address), method_hub, r_stack)
         method_instructions.all_blocks[block.identify] = block
         # 执行完毕，获取其后续块（跳转过去的块或者下一个块）
         if not block.is_return and (block.jump_to_block is None or
@@ -856,13 +861,13 @@ def static_analysis(binary_file, app_name, arch=0):
 
         sorted_slice_addresses = sorted_list_for_hex_string(slice_addresses)
 
-        print("Start disassemble all methods!")
+        # print("Start disassemble all methods!")
         method_hub = MachoMethodHub()  # 对于每一个架构都有一个
-        methods_hubs.append(method_hub)
-        method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr, sorted_slice_addresses, method_hub=method_hub)
-        print("Disassemble complete!")
-        for method_instruction in method_instructions:
-            _analyse_method(method_instruction, mach_info, method_hub=method_hub)
+        # methods_hubs.append(method_hub)
+        # method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr, sorted_slice_addresses, method_hub=method_hub)
+        # print("Disassemble complete!")
+        # for method_instruction in method_instructions:
+        #     _analyse_method(method_instruction, mach_info, method_hub=method_hub)
 
         pasted_method = check_has_paste_board(method_hub)
         storage_method = check_storage_type(method_hub)
@@ -870,18 +875,19 @@ def static_analysis(binary_file, app_name, arch=0):
         possible_hot_fix_method = check_possible_hot_fix(method_hub)
         keychain_method = check_access_keychain(method_hub)
 
+        # method_hub.list_all_methods()
+
         # address = mach_info.get_method_address('ABKModelManager', 'manager')
         # address = mach_info.get_method_address('ABKTipView', 'showWarningWithText:toView:withDuration:')
         # address = mach_info.get_method_address('ABKTipView', 'showText:toView:')
-        # address = mach_info.get_method_address('ABKTipView', 'showText:toView:')
-        # m = _disasm_specified_function(arch, mode, mach_info.text, address, mach_info.text_addr, sorted_slice_addresses)
-        # method_instruction = _analyse_method(m, mach_info, method_hub=method_hub)
-        # for from_item in method_instruction.data_flows:
-        #     data_flow: MethodDataFlow = method_instruction.data_flows[from_item]
-        #     data_flow.describe()
+        address = mach_info.get_method_address('ABKTipView', 'showText:toView:')
+        m = _disasm_specified_function(arch, mode, mach_info.text, address, mach_info.text_addr, sorted_slice_addresses)
+        method_instruction = _analyse_method(m, mach_info, method_hub=method_hub)
+        for from_item in method_instruction.data_flows:
+            data_flow: MethodDataFlow = method_instruction.data_flows[from_item]
+            data_flow.describe()
 
         # def cfg_provider(class_name, imp_name):
-        #     # print(class_name, imp_name)
         #     method_instruction = method_hub.get_method_insn(class_name, imp_name)
         #     return method_instruction
         # cfg = generate_cfg(method_instruction, cfg_provider, False)
@@ -892,9 +898,7 @@ def static_analysis(binary_file, app_name, arch=0):
         # method_ins = method_hub.get_method_insn('ABKModelManager', 'queryItemsFromSQLiteWithStatements:')
 
         # if method_ins is not None:
-        #     cfg = generate_cfg(method_ins, cfg_provider, True)
-        #     for b in cfg.all_blocks:
-        #         print(b.name)
+        #     cfg = generate_cfg(method_ins, cfg_provider, False)
         #     cfg.view()
 
         (read_paste_board_path, write_paste_board_path,
@@ -904,30 +908,30 @@ def static_analysis(binary_file, app_name, arch=0):
          background_path,
          poster_notification_path, handler_notification_path) = setup_output_environment(app_name)
 
-        print('')
-        # Output the result of analysis
-        print('===================================================')
-        # Output the method read or write paste board
-        read_paste_method = pasted_method['read_paste_board']
-        write_paste_method = pasted_method['write_paste_board']
-        print('Follow methods has read the content from paste board:')
-        for cls, method in read_paste_method:
-
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(read_paste_board_path)
-            print('\t', cls, method)
-            method_ins = method_hub.get_method_insn(cls, method)
-            for from_item in method_ins.data_flows:
-                data_flow: MethodDataFlow = method_ins.data_flows[from_item]
-                data_flow.describe()
+        # print('')
+        # # Output the result of analysis
+        # print('===================================================')
+        # # Output the method read or write paste board
+        # read_paste_method = pasted_method['read_paste_board']
+        # write_paste_method = pasted_method['write_paste_board']
+        # print('Follow methods has read the content from paste board:')
+        # for cls, method in read_paste_method:
+        #
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(read_paste_board_path)
+        #     print('\t', cls, method)
+        #     method_ins = method_hub.get_method_insn(cls, method)
+        #     # for from_item in method_ins.data_flows:
+        #     #     data_flow: MethodDataFlow = method_ins.data_flows[from_item]
+        #     #     data_flow.describe()
         # print('')
         # print('Follow methods has write the content to paste board:')
         # for cls, method in write_paste_method:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(write_paste_board_path)
+        #     # method_ins = method_hub.get_method_insn(cls, method)
+        #     # if method_ins is not None:
+        #     #     cfg = generate_cfg(method_ins, cfg_provider, True)
+        #     #     cfg.save_to(write_paste_board_path)
         #     print('\t', cls, method)
         # print('')
         #
@@ -935,34 +939,34 @@ def static_analysis(binary_file, app_name, arch=0):
         # # Output the method storage
         # print('Follow methods using `UserDefaults` to store data:')
         # for cls, method in storage_method['user_defaults']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(ud_storage_path)
+        #     # method_ins = method_hub.get_method_insn(cls, method)
+        #     # if method_ins is not None:
+        #     #     cfg = generate_cfg(method_ins, cfg_provider, True)
+        #     #     cfg.save_to(ud_storage_path)
         #     print('\t', cls, method)
         # print('')
         # print('Follow methods using `KeyArchived` to store data:')
         # for cls, method in storage_method['key_archived']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(ka_storage_path)
+        #     # method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(ka_storage_path)
         #     print('\t', cls, method)
         # print('')
         # print('Follow methods using `SQLite` to store data:')
         # for cls, method in storage_method['sqlite']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(s_storage_path)
+        # #     method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(s_storage_path)
         #     print('\t', cls, method)
         # print('')
         # print('Follow methods using `Core Data` to store data:')
         # for cls, method in storage_method['coredata']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(c_storage_path)
+        # #     method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(c_storage_path)
         #     print('\t', cls, method)
         # print('')
         #
@@ -971,24 +975,24 @@ def static_analysis(binary_file, app_name, arch=0):
         # print('Follow methods call the `JSContext` method, maybe using `hotfix`:')
         # print('* init JSContext:')
         # for cls, method in possible_hot_fix_method['js_context_init']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(i_hotfix_path)
+        # #     method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(i_hotfix_path)
         #     print('\t', cls, method)
         # print('* set `OC` behaviour to JSContext: (The detail of behaviour cannot find out currently)')
         # for cls, method in possible_hot_fix_method['js_context_set']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(s_hotfix_path)
+        # #     method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(s_hotfix_path)
         #     print('\t', cls, method)
         # print('* evaluate JSContext:')
         # for cls, method in possible_hot_fix_method['js_context_evaluate']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(e_hotfix_path)
+        # #     method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(e_hotfix_path)
         #     print('\t', cls, method)
         # print('')
         #
@@ -996,34 +1000,34 @@ def static_analysis(binary_file, app_name, arch=0):
         # # Output the method keychain
         # print('Follow methods has added data to keychain:')
         # for cls, method in keychain_method['add_keychain']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(add_keychain_path)
+        # #     method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(add_keychain_path)
         #     print('\t', cls, method)
         # print('')
         # print('Follow methods has searched data from keychain:')
         # for cls, method in keychain_method['search_keychain']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(select_keychain_path)
+        # #     method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(select_keychain_path)
         #     print('\t', cls, method)
         # print('')
         # print('Follow methods has updated data to keychain:')
         # for cls, method in keychain_method['update_keychain']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(update_keychain_path)
+        # #     method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(update_keychain_path)
         #     print('\t', cls, method)
         # print('')
         # print('Follow methods has deleted data from keychain:')
         # for cls, method in keychain_method['delete_keychain']:
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     if method_ins is not None:
-        #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        #         cfg.save_to(delete_keychain_path)
+        # #     method_ins = method_hub.get_method_insn(cls, method)
+        # #     if method_ins is not None:
+        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #         cfg.save_to(delete_keychain_path)
         #     print('\t', cls, method)
         # print('')
         #
@@ -1034,10 +1038,10 @@ def static_analysis(binary_file, app_name, arch=0):
         # for key in behaviours:
         #     if len(behaviours[key]) > 0:
         #         cls, method = key
-        #         method_ins = method_hub.get_method_insn(cls, method)
-        #         if method_ins is not None:
-        #             cfg = generate_cfg(method_ins, cfg_provider, True)
-        #             cfg.save_to(background_path)
+        # #         method_ins = method_hub.get_method_insn(cls, method)
+        # #         if method_ins is not None:
+        # #             cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #             cfg.save_to(background_path)
         #         print('* In method `%s` of class `%s`' % (cls, method))
         #         for api_cls, api_method in behaviours[key]:
         #             print('\t', api_cls, api_method)
@@ -1049,10 +1053,10 @@ def static_analysis(binary_file, app_name, arch=0):
         # for notification in mach_info.notification_poster:
         #     print('* %s' % notification)
         #     for cls, method in mach_info.notification_poster[notification]:
-        #         method_ins = method_hub.get_method_insn(cls, method)
-        #         if method_ins is not None:
-        #             cfg = generate_cfg(method_ins, cfg_provider, True)
-        #             cfg.save_to(poster_notification_path)
+        # #         method_ins = method_hub.get_method_insn(cls, method)
+        # #         if method_ins is not None:
+        # #             cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #             cfg.save_to(poster_notification_path)
         #         print('\t', cls, method)
         # print('')
         #
@@ -1060,10 +1064,10 @@ def static_analysis(binary_file, app_name, arch=0):
         # for notification in mach_info.notification_handler:
         #     print('* %s' % notification)
         #     for cls, method in mach_info.notification_handler[notification]:
-        #         method_ins = method_hub.get_method_insn(cls, method)
-        #         if method_ins is not None:
-        #             cfg = generate_cfg(method_ins, cfg_provider, True)
-        #             cfg.save_to(handler_notification_path)
+        # #         method_ins = method_hub.get_method_insn(cls, method)
+        # #         if method_ins is not None:
+        # #             cfg = generate_cfg(method_ins, cfg_provider, True)
+        # #             cfg.save_to(handler_notification_path)
         #         print('\t', cls, method)
 
     mach_o_file.close()
