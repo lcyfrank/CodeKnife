@@ -95,6 +95,7 @@ body {
     border-radius: 5px;
     width: auto;
     list-style: none;
+    overflow: scroll;
 }
 
 

@@ -65,7 +65,7 @@
                     {% if basic_info.url_schemas|length() == 0 %}
                     <p class="item-value">Empty</p>
                     {% else %}
-                    <ul class="item-list">
+                    <ul class="item-list" style="max-height: 320px;">
                         {% for schema in basic_info.url_schemas %}
                         <li class="item-list-item">{{ schema + '://' }}</li>
                         {% endfor %}
@@ -75,7 +75,7 @@
                     {% if basic_info.supported_document_type|length() == 0 %}
                     <p class="item-value">Empty</p>
                     {% else %}
-                    <ul class="item-list">
+                    <ul class="item-list" style="max-height: 320px;">
                         {% for type in basic_info.supported_document_type %}
                         <li class="item-list-item">{{ type }}</li>
                         {% endfor %}
@@ -135,7 +135,7 @@
                     {% if basic_info.developed_files|length() == 0 %}
                     <p class="item-value">Empty</p>
                     {% else %}
-                    <ul class="item-list">
+                    <ul class="item-list" style="max-height: 770px;">
                         {% for directory, f in basic_info.developed_files %}
                         <li class="item-list-item">{{ directory }}<strong>{{ f }}</strong></li>
                         {% endfor %}
