@@ -306,10 +306,9 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
             mach_info.post_notification(notification, class_name, method_name)
 
         # 处理方法中的参数
+        # 从上下文中提取数据变量，来生成数据流依赖
         method_arguments = mach_info.get_arguments_from_method(caller_name, meth_name)
         for i in range(0, len(method_arguments)):
-            # if i == 1:
-            #     continue
             argument_type = method_arguments[i].type
             argument = None
             if argument_type == 'id' or argument_type == 'Class' or argument_type == 'SEL' or argument_type == 'Pointer':
@@ -323,23 +322,13 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
                 argument = 'int'
 
             # 作为参数的时候
-            # 从上下文中提取数据变量，来生成数据流依赖
             if argument == 'int':
                 context_reg_name = 'gen_' + str(i)
             else:
                 context_reg_name = 'float_' + str(i)
             if context_reg_name in inter.context.register_variable:
                 var_name = inter.context.register_variable[context_reg_name]
-                print(method_name)
-                print(meth_name)
-                # if meth_name == 'addSubview:':
-                #     print('======')
-                #     print(inter.context.register_variable)
-                #     print(context_reg_name)
-                #     print(var_name)
-                #     print('======')
                 from_item = inter.context.variable_from[var_name]
-                print('position: ' + str(i))
                 inter.context.add_from_to(var_name, from_item, instruction, i)
 
     else:
@@ -478,6 +467,8 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
         inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
         inter.context.add_variable('gen_0')  # 存储返回值
         inter.context.var_from('var_' + str(inter.context.variable_count - 1), instruction)
+        if caller_name == 'PasteBoardManager' and meth_name == 'getOutText':
+            print('var_' + str(inter.context.variable_count - 1))
 
     instruction.goto(caller_name, meth_name)  # ！！！！！！！！！！！！！
     return True
@@ -598,6 +589,11 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                     begin, end = add_range
                     if not (begin <= jump_address <= end):
                         basic_block.is_return = True
+                        # 解析返回值传递
+                        if 'gen_0' in inter.context.register_variable:
+                            var_name = inter.context.register_variable['gen_0']
+                            from_item = inter.context.variable_from[var_name]
+                            inter.context.add_to_out(var_name, from_item)
             else:
                 basic_block.jump_condition = cs_insn.mnemonic
             if address_op.type == ARM64_OP_IMM:
@@ -615,6 +611,11 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                 basic_block.jump_to_block = hex(address_op.imm)
         elif cs_insn.id == ARM64_INS_RET:
             basic_block.is_return = True
+            # 解析返回值传递
+            if 'gen_0' in inter.context.register_variable:
+                var_name = inter.context.register_variable['gen_0']
+                from_item = inter.context.variable_from[var_name]
+                inter.context.add_to_out(var_name, from_item)
             return basic_block
     return basic_block
 
@@ -782,22 +783,10 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
     return_types_str = []
 
     for rt in return_types:
-
         return_type = get_obj_name(mach_info, rt, class_name, class_data)
         return_types_str.append(return_type)
     method_instructions.return_type = return_types_str
     method_hub.insert_method_insn(method_instructions)
-    # print(method_name)
-    # for var in ctx.data_flow:
-    #     for from_item, to_item, position in ctx.data_flow[var]:
-    #         cls, mtd = to_item.goto_insns
-    #         to_str = cls + ': ' + mtd
-    #         if type(from_item) == str:
-    #             print('\t%s -> (%s %d)' % (from_item, to_str, position))
-    #         else:
-    #             cls, mtd = from_item.goto_insns
-    #             from_str = cls + ': ' + mtd
-    #             print('\t%s -> (%s %d)' % (from_str, to_str, position))
 
     for data_var in ctx.data_flow:
         for from_item, to_item, position in ctx.data_flow[data_var]:
@@ -805,10 +794,6 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
                 method_instructions.add_data_flow_from_parameter(from_item, to_item, position)
             else:
                 method_instructions.add_data_flow_from_instruction(from_item, to_item, position)
-
-    # print(ctx.variable_from)
-    # print(ctx.register_variable)
-    # print(ctx.memory_variable)
     return method_instructions
 
 
@@ -861,13 +846,13 @@ def static_analysis(binary_file, app_name, arch=0):
 
         sorted_slice_addresses = sorted_list_for_hex_string(slice_addresses)
 
-        # print("Start disassemble all methods!")
+        print("Start disassemble all methods!")
         method_hub = MachoMethodHub()  # 对于每一个架构都有一个
-        # methods_hubs.append(method_hub)
-        # method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr, sorted_slice_addresses, method_hub=method_hub)
-        # print("Disassemble complete!")
-        # for method_instruction in method_instructions:
-        #     _analyse_method(method_instruction, mach_info, method_hub=method_hub)
+        methods_hubs.append(method_hub)
+        method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr, sorted_slice_addresses, method_hub=method_hub)
+        print("Disassemble complete!")
+        for method_instruction in method_instructions:
+            _analyse_method(method_instruction, mach_info, method_hub=method_hub)
 
         pasted_method = check_has_paste_board(method_hub)
         storage_method = check_storage_type(method_hub)
@@ -880,12 +865,12 @@ def static_analysis(binary_file, app_name, arch=0):
         # address = mach_info.get_method_address('ABKModelManager', 'manager')
         # address = mach_info.get_method_address('ABKTipView', 'showWarningWithText:toView:withDuration:')
         # address = mach_info.get_method_address('ABKTipView', 'showText:toView:')
-        address = mach_info.get_method_address('ABKTipView', 'showText:toView:')
-        m = _disasm_specified_function(arch, mode, mach_info.text, address, mach_info.text_addr, sorted_slice_addresses)
-        method_instruction = _analyse_method(m, mach_info, method_hub=method_hub)
-        for from_item in method_instruction.data_flows:
-            data_flow: MethodDataFlow = method_instruction.data_flows[from_item]
-            data_flow.describe()
+        # address = mach_info.get_method_address('ABKTipView', 'showText:toView:')
+        # m = _disasm_specified_function(arch, mode, mach_info.text, address, mach_info.text_addr, sorted_slice_addresses)
+        # method_instruction = _analyse_method(m, mach_info, method_hub=method_hub)
+        # for from_item in method_instruction.data_flows:
+        #     data_flow: MethodDataFlow = method_instruction.data_flows[from_item]
+        #     data_flow.describe()
 
         # def cfg_provider(class_name, imp_name):
         #     method_instruction = method_hub.get_method_insn(class_name, imp_name)
@@ -908,24 +893,25 @@ def static_analysis(binary_file, app_name, arch=0):
          background_path,
          poster_notification_path, handler_notification_path) = setup_output_environment(app_name)
 
-        # print('')
-        # # Output the result of analysis
-        # print('===================================================')
-        # # Output the method read or write paste board
-        # read_paste_method = pasted_method['read_paste_board']
-        # write_paste_method = pasted_method['write_paste_board']
-        # print('Follow methods has read the content from paste board:')
-        # for cls, method in read_paste_method:
-        #
-        # #     if method_ins is not None:
-        # #         cfg = generate_cfg(method_ins, cfg_provider, True)
-        # #         cfg.save_to(read_paste_board_path)
-        #     print('\t', cls, method)
-        #     method_ins = method_hub.get_method_insn(cls, method)
-        #     # for from_item in method_ins.data_flows:
-        #     #     data_flow: MethodDataFlow = method_ins.data_flows[from_item]
-        #     #     data_flow.describe()
-        # print('')
+        print('')
+        # Output the result of analysis
+        print('===================================================')
+        # Output the method read or write paste board
+        read_paste_method = pasted_method['read_paste_board']
+        write_paste_method = pasted_method['write_paste_board']
+        print('Follow methods has read the content from paste board:')
+        for cls, method in read_paste_method:
+        #     if method_ins is not None:
+        #         cfg = generate_cfg(method_ins, cfg_provider, True)
+        #         cfg.save_to(read_paste_board_path)
+            print('\t', cls, method)
+            print('\tData flow as follow:')
+            method_ins = method_hub.get_method_insn(cls, method)
+            for from_item in method_ins.data_flows:
+                data_flow: MethodDataFlow = method_ins.data_flows[from_item]
+                data_flow.describe()
+            print('')
+        print('')
         # print('Follow methods has write the content to paste board:')
         # for cls, method in write_paste_method:
         #     # method_ins = method_hub.get_method_insn(cls, method)

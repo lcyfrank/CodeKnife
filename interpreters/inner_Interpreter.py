@@ -11,7 +11,7 @@ class ExecuteContext:
     def __init__(self):
         self.variable_count = 0
 
-        self.data_flow = {}  # var_name: [(from, to)]
+        self.data_flow = {}  # var_name: [(from, to, position)]
         self.variable_from = {}  # var_name: from
 
         self.register_variable = {}  # register_name: var_name
@@ -57,6 +57,11 @@ class ExecuteContext:
         if var_name not in self.data_flow:
             self.data_flow[var_name] = []
         self.data_flow[var_name].append((from_item, to_item, position))
+
+    def add_to_out(self, var_name, from_item):
+        if var_name not in self.data_flow:
+            self.data_flow[var_name] = []
+        self.data_flow[var_name].append((from_item, 'Out', 0))
 
 
 class Register:
@@ -475,6 +480,13 @@ class Interpreter:
             tracking.append('#' + str(source_value))
             # dest_register.is_memory_content = False
             dest_register.bias = 0
+
+            if type(dest_register) == Register:
+                context_dst_register = 'gen_' + str(self.gen_regs.index(dest_register))
+            else:
+                context_dst_register = 'float_' + str(self.float_regs.index(dest_register))
+            if context_dst_register in self.context.register_variable:
+                del self.context.register_variable[context_dst_register]
         elif source.type == ARM64_OP_REG:
             source_register = self.get_register(insn.reg_name(source.reg))
             source_value = source_register.value
@@ -487,13 +499,12 @@ class Interpreter:
                     context_src_register = 'gen_' + insn.reg_name(source.reg)
             else:
                 context_src_register = 'float_' + str(self.float_regs.index(source_register))
-            if context_src_register in self.context.register_variable:
-                context_dst_register = None
-                if type(dest_register) == Register:
-                    context_dst_register = 'gen_' + str(self.gen_regs.index(dest_register))
-                else:
-                    context_dst_register = 'float_' + str(self.float_regs.index(dest_register))
-                self.context.mov_regs(context_src_register, context_dst_register)
+
+            if type(dest_register) == Register:
+                context_dst_register = 'gen_' + str(self.gen_regs.index(dest_register))
+            else:
+                context_dst_register = 'float_' + str(self.float_regs.index(dest_register))
+            self.context.mov_regs(context_src_register, context_dst_register)
         dest_register.value = source_value
         self.tracking[dest_register_name] = tracking
 

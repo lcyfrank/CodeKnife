@@ -6,10 +6,14 @@ objc_methods_return_type = {
     'UIScreen': {
         'mainScreen': 'UIScreen'
     },
+    'UIButton': {
+        'buttonWithType:': 'UIButton'
+    },
     'UIView': {
     },
     'UIPasteboard': {
-        'generalPasteboard': 'UIPasteboard'
+        'generalPasteboard': 'UIPasteboard',
+        'string': 'NSString'
     },
     'NSNotificationCenter': {
         'defaultCenter': 'NSNotificationCenter'

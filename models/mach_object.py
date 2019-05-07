@@ -308,6 +308,7 @@ class MachObject:
 
     # 方法的参数列表
     def get_arguments_from_method(self, _class, method):
+
         if (_class, method) not in self.methods_type:
             if _class in objc_methods_arguments:
                 class_methods = objc_methods_arguments[_class]
@@ -324,7 +325,11 @@ class MachObject:
                     argument_type = ArgumentData(t, l)
                     arguments_type.append(argument_type)
                 return arguments_type
-            return []
+            arguments_type = [ArgumentData('id', 8), ArgumentData('SEL', 8)]
+            arguments_count = method.count(':')
+            for _ in range(arguments_count):
+                arguments_type.append(ArgumentData('id', 8))
+            return arguments_type
         method_type = self.methods_type[(_class, method)]
         return method_type.arguments_type
 

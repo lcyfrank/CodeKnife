@@ -15,16 +15,26 @@ class MethodDataFlow:
     def describe(self):
         if self.type == MethodDataFlowTypeParameters:
             for to_item, position in self.flow_to:
-                cls, mtd = to_item.goto_insns
-                to_str = hex(to_item.address) + ' ' + cls + ': ' + mtd + '(' + str(position) + ')'
-                print('\t%s -> %s' % (self.source, to_str))
+                if type(to_item) == str:  # str type
+                    if to_item == 'Out':  # Out
+                        to_str = to_item
+                        print('\t%s -> %s' % (self.source, to_str))
+                else:
+                    cls, mtd = to_item.goto_insns
+                    to_str = '<' + hex(to_item.address) + '>' + ' ' + cls + ': ' + mtd + '(' + str(position) + ')'
+                    print('\t%s -> %s' % (self.source, to_str))
         else:
             cls, mtd = self.source.goto_insns
-            from_str = cls + ': ' + mtd
+            from_str = '<' + hex(self.source.address) + '>' + ' ' + cls + ': ' + mtd
             for to_item, position in self.flow_to:
-                cls, mtd = to_item.goto_insns
-                to_str = hex(to_item.address) + ' ' + cls + ': ' + mtd + '(' + str(position) + ')'
-                print('\t%s -> %s' % (from_str, to_str))
+                if type(to_item) == str:  # str type
+                    if to_item == 'Out':  # Out
+                        to_str = to_item
+                        print('\t%s -> %s' % (from_str, to_str))
+                else:
+                    cls, mtd = to_item.goto_insns
+                    to_str = '<' + hex(to_item.address) + '>' + ' ' + cls + ': ' + mtd + '(' + str(position) + ')'
+                    print('\t%s -> %s' % (from_str, to_str))
 
 
 class MethodBasicBlockInstructions:
@@ -82,12 +92,26 @@ class MethodInstructions:
         data_flow: MethodDataFlow = self.data_flows[parameter]
         data_flow.flow(destination, position)
 
-    def add_data_flow_from_instruction(self, instruction ,destination, position):
+    def add_data_flow_from_instruction(self, instruction, destination, position):
         if instruction not in self.data_flows:
             data_flow = MethodDataFlow(MethodDataFlowTypeInstruction, instruction)
             self.data_flows[instruction] = data_flow
         data_flow: MethodDataFlow = self.data_flows[instruction]
         data_flow.flow(destination, position)
+
+    def add_data_flow_from_parameter_to_out(self, parameter):
+        if parameter not in self.data_flows:
+            data_flow = MethodDataFlow(MethodDataFlowTypeParameters, parameter)
+            self.data_flows[parameter] = data_flow
+        data_flow: MethodDataFlow = self.data_flows[parameter]
+        data_flow.flow('Out', 0)
+
+    def add_data_flow_from_instruction_to_out(self, instruction):
+        if instruction not in self.data_flows:
+            data_flow = MethodDataFlow(MethodDataFlowTypeInstruction, instruction)
+            self.data_flows[instruction] = data_flow
+        data_flow: MethodDataFlow = self.data_flows[instruction]
+        data_flow.flow('Out', 0)
 
 class Instruction:
 
