@@ -146,7 +146,6 @@ class MethodData:
             self.return_type = 'id'   # guess default return_type should be 'id'
             self.arguments_type = []  # empty means no argument
         else:
-            print(md_dict)
             self._class = md_dict['_class']
             self.type = md_dict['type']
             self.name = md_dict['name']

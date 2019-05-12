@@ -74,10 +74,31 @@ def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_addr
             # !!!!!!
             # !!!!!! 这里的 insn 换成自己定义的类
             # !!!!!!
-            last_addr = insn.address
+            cs_insn = CSInstruction()
+            cs_insn.address = insn.address
+            cs_insn.id = insn.id
+            cs_insn.mnemonic = insn.mnemonic
+            cs_insn.bytes = insn.bytes
+            cs_insn.op_str = insn.op_str
+
+            for operand in insn.operands:
+                cs_operand = CSOperand()
+                cs_operand.type = operand.type
+                if operand.type == ARM64_OP_REG:
+                    cs_operand.reg = insn.reg_name(operand.reg)
+                elif operand.type == ARM64_OP_MEM:
+                    mem = CSMemory()
+                    mem.base = insn.reg_name(operand.mem.base)
+                    mem.index = operand.mem.index
+                    mem.disp = operand.mem.disp
+                    cs_operand.mem = mem
+
+                cs_insn.operands.append(cs_operand)
+
+            last_addr = cs_insn.address
             progress_bar.update(4)
             if last_addr < slice_addr:
-                current_function.append(insn)
+                current_function.append(cs_insn)
             elif last_addr == slice_addr:
                 if len(current_function) != 0:
                     all_functions.append(current_function)
@@ -85,7 +106,7 @@ def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_addr
                     current_function = []
                 fm_count += 1
                 slice_addr = int(slice_address[fm_count], 16)
-                current_function.append(insn)
+                current_function.append(cs_insn)
             else:  # >
                 while last_addr > slice_addr:
                     fm_count += 1
@@ -97,9 +118,9 @@ def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_addr
                         current_function = []
                     fm_count += 1
                     slice_addr = int(slice_address[fm_count], 16)
-                    current_function.append(insn)
+                    current_function.append(cs_insn)
                 else:
-                    current_function.append(insn)
+                    current_function.append(cs_insn)
 
     progress_bar.close()
     if len(current_function) > 0:
@@ -609,7 +630,7 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
             jump_condition = cs_insn.mnemonic + ' '
             condition_op = cs_insn.operands[0]
             if condition_op.type == ARM64_OP_REG:
-                reg_name = cs_insn.reg_name(condition_op.reg)
+                reg_name = condition_op.reg
                 jump_condition += reg_name
             basic_block.jump_condition = jump_condition
             if address_op.type == ARM64_OP_IMM:
@@ -860,8 +881,11 @@ def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue=None):
         method_hub = MachoMethodHub()  # 对于每一个架构都有一个
         methods_hubs.append(method_hub)
         msg_queue.put('Start disassemble all methods')
-        method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr,
-                                                           sorted_slice_addresses, method_hub=method_hub)
+        method_instructions = load_cs_instructions_of_md5(binary_md5, mach_info.is_64_bit)
+        if method_instructions is None:
+            method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr,
+                                                               sorted_slice_addresses, method_hub=method_hub)
+            store_md5_with_cs_instructions(binary_md5, method_instructions, mach_info.is_64_bit)
         # Disassemble complete
         msg_queue.put('Disassemble all methods complete')
         # Start analyse method
@@ -870,8 +894,8 @@ def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue=None):
             _analyse_method(method_instruction, mach_info, method_hub=method_hub)
         msg_queue.put('Analyze all methods complete')
 
-        print(list(method_hub.cs_insns.values())[0][0].__dict__)
         # queue.put(method_hub)
+
 
 # 0 means 64-bit
 # 1 means 32-bit

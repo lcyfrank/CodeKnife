@@ -113,6 +113,10 @@ class MethodInstructions:
         data_flow: MethodDataFlow = self.data_flows[instruction]
         data_flow.flow('Out', 0)
 
+    def convert_to_dict(self):
+        pass
+
+
 class Instruction:
 
     def __init__(self, instruction: str):
@@ -130,14 +134,75 @@ class Instruction:
 
 class CSInstruction:
 
-    def __init__(self):
-        self.address = 0
-        self.id = 0
-        self.operands = []
+    def __init__(self, csi_dict=None):
+        if csi_dict is None:
+            self.address = 0
+            self.id = 0
+            self.operands = []
+            self.mnemonic = None
+            self.bytes = None
+            self.op_str = None
+        else:
+            self.address = csi_dict['address']
+            self.id = csi_dict['id']
+            self.mnemonic = csi_dict['mnemonic']
+            self.bytes = bytes.fromhex(csi_dict['bytes'])
+            self.op_str = csi_dict['op_str']
+            self.operands = []
+            for operand_dict in csi_dict['operands']:
+                self.operands.append(CSOperand(cso_dict=operand_dict))
+
+    def convert_to_dict(self):
+        csi_dict = {
+            'address': self.address,
+            'id': self.id,
+            'operands': [],
+            'mnemonic': self.mnemonic,
+            'bytes': self.bytes.hex(),
+            'op_str': self.op_str
+        }
+
+        for operand in self.operands:
+            csi_dict['operands'].append(operand.convert_to_dict())
+
+        return csi_dict
 
 
 class CSOperand:
 
-    def __init__(self):
-        self.type = 0
-        self.imm = 0
+    def __init__(self, cso_dict=None):
+        if cso_dict is None:
+            self.type = 0
+            self.imm = 0
+            self.reg = None  # eg. x1
+            self.mem = None
+        else:
+            self.type = cso_dict['type']
+            self.imm = cso_dict['imm']
+            self.reg = cso_dict['reg']
+            self.mem = CSMemory(cso_dict['mem'])
+
+    def convert_to_dict(self):
+        cso_dict = {
+            'type': self.type,
+            'imm': self.imm,
+            'reg': self.reg,
+            'mem': self.mem.convert_to_dict() if self.mem is not None else None
+        }
+        return cso_dict
+
+
+class CSMemory:
+
+    def __init__(self, csm_dict=None):
+        if csm_dict is None:
+            self.base = None  # eg. x1
+            self.index = 0
+            self.disp = 0
+        else:
+            self.base = csm_dict['base']
+            self.index = csm_dict['index']
+            self.disp = csm_dict['disp']
+
+    def convert_to_dict(self):
+        return self.__dict__.copy()

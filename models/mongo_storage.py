@@ -1,6 +1,7 @@
 import pymongo
 from models.basic_info import ApplicationBasicInfo
 from models.mach_object import *
+from models.inner_instruction import *
 import json
 
 
@@ -92,3 +93,62 @@ def load_mach_info_of_md5(md5):
         return None
     else:
         return MachContainer(mc_dict=mach_info_dict)
+
+
+def store_md5_with_cs_instructions(md5, instructions, is_64_bit):
+    '''
+    存储反编译结果
+    '''
+    mongo_client = pymongo.MongoClient('mongodb://127.0.0.1:27017/')
+    mongo_db = mongo_client['codeknife']
+    cs_instructions_col = mongo_db['cs_instructions']
+
+    condition = {'md5': md5, 'is_64_bit': is_64_bit}
+    stored_instructions = cs_instructions_col.find_one(condition)
+
+    instructions_dict = {'md5': md5, 'is_64_bit': is_64_bit}
+    instructions_list = []
+    for method_instructions in instructions:
+        method_instructions_list = []
+        for instruction in method_instructions:
+            method_instructions_list.append(instruction.convert_to_dict())
+        instructions_list.append(method_instructions_list)
+    instructions_dict['instructions'] = instructions_list
+
+    if stored_instructions is None:
+        cs_instructions_col.insert_one(instructions_dict)
+    else:
+        instructions_dict['_id'] = stored_instructions['_id']
+        cs_instructions_col.update_one(instructions_dict)
+
+
+def load_cs_instructions_of_md5(md5, is_64_bit):
+    mongo_client = pymongo.MongoClient('mongodb://127.0.0.1:27017/')
+    mongo_db = mongo_client['codeknife']
+    cs_instructions_col = mongo_db['cs_instructions']
+
+    instructions_dict = cs_instructions_col.find_one({'md5': md5, 'is_64_bit': is_64_bit})
+    if instructions_dict is None:
+        return None
+    else:
+        instructions = []
+        for method_instruction_list in instructions_dict['instructions']:
+            method_instructions = []
+            for instruction_dict in method_instruction_list:
+                method_instructions.append(CSInstruction(csi_dict=instruction_dict))
+            instructions.append(method_instructions)
+        return instructions
+
+
+def store_md5_with_method_hub(md5, method_hub, tag):
+    mongo_client = pymongo.MongoClient('mongodb://127.0.0.1:27017/')
+    mongo_db = mongo_client['codeknife']
+    method_hub_col = mongo_db['method_hub']
+
+    condition = {'md5': md5, 'tag': tag}
+    stored_method_hub = method_hub_col.find_one(condition)
+
+    if stored_method_hub is None:
+        pass
+    else:
+        pass
