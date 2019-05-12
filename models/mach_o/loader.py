@@ -139,8 +139,35 @@ class LoadCommand(MachBase):
         lc.cmdsize = parse_int(_bytes[4:8])
         return lc
 
+    @classmethod
+    def parse_from_dict(cls, lc_dict):
+        cmd = lc_dict['cmd']
+        if cmd == cls.LC_SEGMENT:
+            return SegmentCommand.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_SYMTAB:
+            return SymtabCommand.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_DYSYMTAB:
+            return DysymtabCommand.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_LOAD_DYLIB:
+            return LoadDylibCommand.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_SEGMENT_64:
+            return SegmentCommand64.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_DYLD_INFO:
+            return DyldInfoCommand.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_DYLD_INFO_ONLY:
+            return DyldInfoCommand.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_LOAD_WEAK_DYLIB:
+            return LoadDylibCommand.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_RPATH:
+            return RpathCommand.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_REQ_DYLD:
+            return None
+
     def get_size(self):
         return LoadCommand.LC_TOTAL_SIZE
+
+    def convert_to_dict(self):
+        return self.__dict__.copy()
 
 
 class RpathCommand(LoadCommand):
@@ -157,6 +184,12 @@ class RpathCommand(LoadCommand):
         rc.cmd = parse_int(_bytes[0:4])
         rc.cmdsize = parse_int(_bytes[4:8])
         rc.path = parse_int(_bytes[8:12])
+        return rc
+
+    @classmethod
+    def parse_from_dict(cls, lc_dict):
+        rc = cls()
+        rc.__dict__ = lc_dict.copy()
         return rc
 
     def get_size(self):
@@ -207,6 +240,12 @@ class DyldInfoCommand(LoadCommand):
         dic.export_size = parse_int(_bytes[44:48])
         return dic
 
+    @classmethod
+    def parse_from_dict(cls, dic_dict):
+        dic = cls()
+        dic.__dict__ = dic_dict.copy()
+        return dic
+
     def get_size(self):
         return DyldInfoCommand.DIC_TOTAL_SIZE
 
@@ -227,8 +266,20 @@ class LoadDylibCommand(LoadCommand):
         dc.dylib = Dylib.parse_from_bytes(_bytes[8:24])
         return dc
 
+    @classmethod
+    def parse_from_dict(cls, dc_dict):
+        dc = cls()
+        dc.__dict__ = dc_dict.copy()
+        dc.dylib = Dylib.parse_from_dict(dc_dict['dylib'])
+        return dc
+
     def get_size(self):
         return LoadDylibCommand.LDC_TOTAL_SIZE
+
+    def convert_to_dict(self):
+        ldc_dict = self.__dict__.copy()
+        ldc_dict['dylib'] = self.dylib.__dict__.copy()
+        return ldc_dict
 
 
 class Dylib:
@@ -252,6 +303,12 @@ class Dylib:
         dylib.timestamp = parse_int(_bytes[4:8])
         dylib.current_version = parse_int(_bytes[8:12])
         dylib.compatibility_version = parse_int(_bytes[12:16])
+        return dylib
+
+    @classmethod
+    def parse_from_dict(cls, d_dict):
+        dylib = cls()
+        dylib.__dict__ = d_dict.copy()
         return dylib
 
     def get_size(self):
@@ -282,6 +339,12 @@ class SymtabCommand(LoadCommand):
         sc.nsyms = parse_int(_bytes[12:16])
         sc.stroff = parse_int(_bytes[16:20])
         sc.strsize = parse_int(_bytes[20:24])
+        return sc
+
+    @classmethod
+    def parse_from_dict(cls, sc_dict):
+        sc = cls()
+        sc.__dict__ = sc_dict.copy()
         return sc
 
     def get_size(self):
@@ -356,6 +419,12 @@ class DysymtabCommand(LoadCommand):
         dc.nlocrel = parse_int(_bytes[76:80])
         return dc
 
+    @classmethod
+    def parse_from_dict(cls, dc_dict):
+        dc = cls()
+        dc.__dict__ = dc_dict.copy()
+        return dc
+
     def get_size(self):
         return DysymtabCommand.DC_TOTAL_SIZE
 
@@ -401,6 +470,12 @@ class SegmentCommand(LoadCommand):
         sc.flags = parse_int(_bytes[52:56])
         return sc
 
+    @classmethod
+    def parse_from_dict(cls, sc_dict):
+        sc = cls()
+        sc.__dict__ = sc_dict.copy()
+        return sc
+
     def get_size(self):
         return SegmentCommand.SC_TOTAL_SIZE
 
@@ -431,6 +506,12 @@ class SegmentCommand64(SegmentCommand):
         sc64.initprot = parse_int(_bytes[60:64])
         sc64.nsects = parse_int(_bytes[64:68])
         sc64.flags = parse_int(_bytes[68:72])
+        return sc64
+
+    @classmethod
+    def parse_from_dict(cls, sc64_dict):
+        sc64 = cls()
+        sc64.__dict__ = sc64_dict.copy()
         return sc64
 
     def get_size(self):
@@ -481,8 +562,17 @@ class Section(MachBase):
         section.reserved2 = parse_int(_bytes[64:68])
         return section
 
+    @classmethod
+    def parse_from_dict(cls, section_dict):
+        section = cls()
+        section.__dict__ = section_dict.copy()
+        return section
+
     def get_size(self):
         return Section.S_TOTAL_SIZE
+
+    def convert_to_dict(self):
+        return self.__dict__.copy()
 
 
 class Section64(Section):
@@ -520,5 +610,14 @@ class Section64(Section):
         section.reserved3 = parse_int(_bytes[76:80])
         return section
 
+    @classmethod
+    def parse_from_dict(cls, section_dict):
+        section = cls()
+        section.__dict__ = section_dict.copy()
+        return section
+
     def get_size(self):
         return Section64.S_TOTAL_SIZE
+
+    def convert_to_dict(self):
+        return self.__dict__.copy()

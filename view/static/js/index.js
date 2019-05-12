@@ -10,7 +10,7 @@ $(function () {
         event.preventDefault();
         let formData = new FormData(this);
         $.ajax({
-            xhr: function() {
+            xhr: function () {
                 let xhr = new XMLHttpRequest();
                 xhr.upload.addEventListener("progress", function (e) {
                     if (e.lengthComputable) {
@@ -27,8 +27,13 @@ $(function () {
             processData: false,
             contentType: false
         }).done(function (response) {
-            window.location.href = '/analysis';
-            console.log("Upload successfully!");
+            if (response != "Error") {
+                let file_md5 = response.substr(2, response.length - 2);
+                window.location.href = "/analysis/basic/" + file_md5;
+                console.log("Upload successfully!");
+            } else {
+                console.log("Upload failed!");
+            }
         }).fail(function (response) {
             console.log("Upload failed!");
         });

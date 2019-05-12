@@ -19,43 +19,52 @@ Analyse_Both = 2
 
 class MachContainer:
 
-    def __init__(self, _bytes, file_provider=None, mode=Analyse_64_Bit):
+    def __init__(self, _bytes=None, file_provider=None, mode=Analyse_64_Bit, mc_dict=None):
 
-        self.file_provider = file_provider
-        self.bytes = _bytes
-        self.is_fat = _bytes.startswith(b'\xca\xfe\xba\xbe')
-        self.mach_objects = []
-        self.nfat_arch = 0
+        if _bytes is not None:
+            self.file_provider = file_provider
+            self.bytes = _bytes
+            self.is_fat = _bytes.startswith(b'\xca\xfe\xba\xbe')
+            self.mach_objects = []
+            self.nfat_arch = 0
 
-        if self.is_fat:
-            header = self.aple_header()
-            self.nfat_arch = header.nfat_arch
-            if mode == Analyse_32_Bit:  # just for 32-bit
-                for i in range(0, self.nfat_arch):
-                    arch = self.aple_arch(i)
-                    if arch.cputype == 0xc:  # ARM 32-bit
+            if self.is_fat:
+                header = self.aple_header()
+                self.nfat_arch = header.nfat_arch
+                if mode == Analyse_32_Bit:  # just for 32-bit
+                    for i in range(0, self.nfat_arch):
+                        arch = self.aple_arch(i)
+                        if arch.cputype == 0xc:  # ARM 32-bit
+                            mach_bytes = self.bytes[arch.offset:arch.offset + arch.size]
+                            mach_object = MachObject(mach_bytes, _offset=arch.offset, file_provider=self.file_provider)
+                            self.mach_objects.append(mach_object)
+                            break
+                elif mode == Analyse_64_Bit:  # just for 64-bit
+                    for i in range(0, self.nfat_arch):
+                        arch = self.aple_arch(i)
+                        if arch.cputype == 0x100000c:  # ARM 32-bit
+                            mach_bytes = self.bytes[arch.offset:arch.offset + arch.size]
+                            mach_object = MachObject(mach_bytes, _offset=arch.offset, file_provider=self.file_provider)
+                            self.mach_objects.append(mach_object)
+                            break
+                else:  # analyse both
+                    for i in range(0, self.nfat_arch):  # 两个都要
+                        arch = self.aple_arch(i)
                         mach_bytes = self.bytes[arch.offset:arch.offset + arch.size]
                         mach_object = MachObject(mach_bytes, _offset=arch.offset, file_provider=self.file_provider)
-                        self.mach_objects.append(mach_object)
-                        break
-            elif mode == Analyse_64_Bit:  # just for 64-bit
-                for i in range(0, self.nfat_arch):
-                    arch = self.aple_arch(i)
-                    if arch.cputype == 0x100000c:  # ARM 32-bit
-                        mach_bytes = self.bytes[arch.offset:arch.offset + arch.size]
-                        mach_object = MachObject(mach_bytes, _offset=arch.offset, file_provider=self.file_provider)
-                        self.mach_objects.append(mach_object)
-                        break
-            else:  # analyse both
-                for i in range(0, self.nfat_arch):  # 两个都要
-                    arch = self.aple_arch(i)
-                    mach_bytes = self.bytes[arch.offset:arch.offset + arch.size]
-                    mach_object = MachObject(mach_bytes, _offset=arch.offset, file_provider=self.file_provider)
 
-                    self.mach_objects.append(mach_object)
+                        self.mach_objects.append(mach_object)
+            else:
+                mach_object = MachObject(_bytes, file_provider=self.file_provider)
+                self.mach_objects.append(mach_object)
         else:
-            mach_object = MachObject(_bytes, file_provider=self.file_provider)
-            self.mach_objects.append(mach_object)
+            self.file_provider = None
+            self.bytes = None
+            self.is_fat = mc_dict['is_fat']
+            self.nfat_arch = mc_dict['nfat_arch']
+            self.mach_objects = []
+            for mach_object_dict in mc_dict['mach_objects']:
+                self.mach_objects.append(MachObject(mo_dict=mach_object_dict))
 
     def aple_header(self):
         header_bytes = self.bytes[0:FatHeader.FH_TOTAL_SIZE]
@@ -73,6 +82,14 @@ class MachContainer:
         log_error(error)
         return None
 
+    def convert_to_dict(self):
+        mc_dict = {
+            'is_fat': self.is_fat, 'nfat_arch': self.nfat_arch, 'mach_objects': []
+        }
+        for mach_info in self.mach_objects:
+            mc_dict['mach_objects'].append(mach_info.convert_to_dict())
+        return mc_dict
+
 
 MachObjectTypeExecutable = 0
 MachObjectTypeDylib = 1
@@ -80,95 +97,163 @@ MachObjectTypeDylib = 1
 
 class MachObject:
 
-    def __init__(self, _bytes, _type=MachObjectTypeExecutable, _offset=0x0, file_provider=None):
-        self.type = _type
-        self.file_provider = file_provider
-        self.dylib_frameworks_path = []  # path names
-        self.dylib_frameworks_mach = {}  # {path_name: macho} cache 动态库
+    def __init__(self, _bytes=None, _type=MachObjectTypeExecutable, _offset=0x0, file_provider=None, mo_dict=None):
+        if _bytes is not None:
+            self.type = _type
+            self.file_provider = file_provider
+            self.dylib_frameworks_path = []  # path names
+            self.dylib_frameworks_mach = {}  # {path_name: macho} cache 动态库
 
-        self.dylib_frameworks_pair = {}  # dylib_class: framework_path
+            self.dylib_frameworks_pair = {}  # dylib_class: framework_path
 
-        self.notification_handler = {}  # NSNotification 处理方法  {notification: [()]}
-        self.notification_poster = {}  # NSNotification 发送的方法  {notification: [()]}
+            self.notification_handler = {}  # NSNotification 处理方法  {notification: [()]}
+            self.notification_poster = {}  # NSNotification 发送的方法  {notification: [()]}
 
-        self.bytes = _bytes
-        self.offset = _offset
-        self.is_64_bit = _bytes.startswith(b'\xcf\xfa\xed\xfe')
-        header = self.aple_header()
-        self.cpu_type = header.cputype
-        self.cpu_subtype = header.cpusubtype
-        self.file_type = header.filetype
-        self.ncmds = header.ncmds
+            self.bytes = _bytes
+            self.offset = _offset
+            self.is_64_bit = _bytes.startswith(b'\xcf\xfa\xed\xfe')
+            header = self.aple_header()
+            self.cpu_type = header.cputype
+            self.cpu_subtype = header.cpusubtype
+            self.file_type = header.filetype
+            self.ncmds = header.ncmds
 
-        self._cmds = self.aple_cmds()
+            self._cmds = self.aple_cmds()
 
-        # 解析动态库
-        for index, dylib_command in self._cmds['load_dylib']:
-            # print(index)
-            dylib = dylib_command.dylib
-            name_begin = dylib.name
-            name_end = _bytes.find(b'\x00', name_begin)
-            name = parse_str(_bytes[name_begin:name_end])
-            self.dylib_frameworks_path.append(name)
+            # 解析动态库
+            for index, dylib_command in self._cmds['load_dylib']:
+                # print(index)
+                dylib = dylib_command.dylib
+                name_begin = dylib.name
+                name_end = _bytes.find(b'\x00', name_begin)
+                name = parse_str(_bytes[name_begin:name_end])
+                self.dylib_frameworks_path.append(name)
 
-            # print(dylib_command.dylib)
-        self._sections = self.aple_sections()
+                # print(dylib_command.dylib)
+            self._sections = self.aple_sections()
 
-        self.text = self.generate_text()
-        text_section, _ = self._sections['text']
-        self.text_addr = text_section.addr  # 代码的内存（不是 offset）
+            self.text = self.generate_text()
+            text_section, _ = self._sections['text']
+            self.text_addr = text_section.addr  # 代码的内存（不是 offset）
 
-        self.symbols = {}           # address: name
-        self.ivar_refs = {}         # <> : index
-        # self.property_refs = {}
+            self.symbols = {}           # address: name
+            self.ivar_refs = {}         # <> : index
+            # self.property_refs = {}
 
-        self.dylibs = {}            # ref_address: name
-        self.functions = {}         # impaddr: symbol_address
-        self.functions_type = []    # < function_data >
-        self.statics = {}
-        self.statics_class = {}     # static value: class_name
-        self.ivars = {}             # ref_address: <ivar>
-        # self.properties = {}
+            self.dylibs = {}            # ref_address: name
+            self.functions = {}         # impaddr: symbol_address
+            self.functions_type = []    # < function_data >
+            self.statics = {}
+            self.statics_class = {}     # static value: class_name
+            self.ivars = {}             # ref_address: <ivar>
+            # self.properties = {}
 
-        # self.methods 中的方法均为开发人员实现的方法，包括类中的方法和分类中的方法
-        self.class_methods = {}     # class_name: {method_name: address}
-        self.methods = {}           # impaddr: (class, method)  / impaddr: (block, block)
-        self.methods_type = {}      # (class, method): <method_data>
+            # self.methods 中的方法均为开发人员实现的方法，包括类中的方法和分类中的方法
+            self.class_methods = {}     # class_name: {method_name: address}
+            self.methods = {}           # impaddr: (class, method)  / impaddr: (block, block)
+            self.methods_type = {}      # (class, method): <method_data>
 
-        self.class_name_address = {}  # name: data_address
-        self.class_datas = {}       # data_address: < name, super_name, methods >
-        self.cat_datas = {}         # data_address: < name, class_name, methods >
+            self.class_name_address = {}  # name: data_address
+            self.class_datas = {}       # data_address: < name, super_name, methods >
+            self.cat_datas = {}         # data_address: < name, class_name, methods >
 
-        # 解析 Block
-        self.block_methods = {}     # data_address: <block_method_data>
+            # 解析 Block
+            self.block_methods = {}     # data_address: <block_method_data>
 
-        self.cfstrings = {}
+            self.cfstrings = {}
 
-        self.parse_dylib_class()
-        # print(self.dylibs['0x10207e840'])
-        # for key in self.dylibs:
-        #     print(key, self.symbols[hex(self.dylibs[key])])
+            self.parse_dylib_class()
+            # print(self.dylibs['0x10207e840'])
+            # for key in self.dylibs:
+            #     print(key, self.symbols[hex(self.dylibs[key])])
 
-        self.parse_symtab()       # 修改成兼容 32-bit 和 64-bit
-        self.parse_methname()
-        self.parse_classname()
-        self.parse_cstring()
-        self.parse_methtype()
+            self.parse_symtab()       # 修改成兼容 32-bit 和 64-bit
+            self.parse_methname()
+            self.parse_classname()
+            self.parse_cstring()
+            self.parse_methtype()
 
-        self.parse_block()  # 解析 Block 需要依赖  dylib
+            self.parse_block()  # 解析 Block 需要依赖  dylib
 
-        #  兼容 32-bit 和 64-bit
-        if self.is_64_bit:
-            self.parse_functions64()
+            #  兼容 32-bit 和 64-bit
+            if self.is_64_bit:
+                self.parse_functions64()
+            else:
+                self.parse_functions()
+
+            # self.parse_static()       # 修改成兼容 32-bit 和 64-bit
+
+            self.parse_cfstring()
+            self.parse_class_methods_and_data()
+            self.parse_cat_methods_and_data()
+            # print(self.dylib_frameworks_pair)
         else:
-            self.parse_functions()
+            self.functions_type = []
 
-        # self.parse_static()       # 修改成兼容 32-bit 和 64-bit
+            self.type = mo_dict['type']
+            self.dylib_frameworks_path = mo_dict['dylib_frameworks_path']
+            self.dylib_frameworks_pair = mo_dict['dylib_frameworks_pair']
+            self.notification_handler = mo_dict['notification_handler']
+            self.notification_poster = mo_dict['notification_poster']
+            self.offset = mo_dict['offset']
+            self.is_64_bit = mo_dict['is_64_bit']
+            self.cpu_type = mo_dict['cpu_type']
+            self.cpu_subtype = mo_dict['cpu_subtype']
+            self.file_type = mo_dict['file_type']
+            self.ncmds = mo_dict['ncmds']
+            self.text_addr = mo_dict['text_addr']
+            self.symbols = mo_dict['symbols']
+            self.dylibs = mo_dict['dylibs']
+            self.functions = mo_dict['functions']
+            self.statics = mo_dict['statics']
+            self.statics_class = mo_dict['statics_class']
 
-        self.parse_cfstring()
-        self.parse_class_methods_and_data()
-        self.parse_cat_methods_and_data()
-        # print(self.dylib_frameworks_pair)
+            self.class_methods = eval(mo_dict['class_methods'])
+            self.methods = mo_dict['methods']
+            self.class_name_address = mo_dict['class_name_address']
+            self.cfstrings = mo_dict['cfstrings']
+            self.ivar_refs = mo_dict['ivar_refs']
+            self.ivars = mo_dict['ivars']
+
+            self.bytes = mo_dict['bytes']
+            self.text = mo_dict['text']
+
+            self.dylib_frameworks_mach = {}
+            for path_name in self.dylib_frameworks_mach:
+                self.dylib_frameworks_mach[path_name] = MachObject(mo_dict=mo_dict['dylib_frameworks_mach'])
+
+            self._cmds = {}
+            for key in mo_dict['_cmds']:
+                if key not in self._cmds:
+                    self._cmds[key] = []
+                for offset, cmd in mo_dict['_cmds'][key]:
+                    self._cmds[key].append((offset, LoadCommand.parse_from_dict(cmd)))
+
+            self._sections = {}
+            for key in mo_dict['_sections']:
+                section_dict, index = mo_dict['_sections'][key]
+                if self.is_64_bit:
+                    section = Section64.parse_from_dict(section_dict)
+                else:
+                    section = Section.parse_from_dict(section_dict)
+                self._sections[key] = (section, index)
+
+            self.methods_type = {}
+            methods_type_dict = eval(mo_dict['methods_type'])
+            for key in methods_type_dict:
+                self.methods_type[key] = MethodData(md_dict=methods_type_dict[key])
+
+            self.class_datas = {}
+            for key in mo_dict['class_datas']:
+                self.class_datas[key] = ClassData(cd_dict=mo_dict['class_datas'][key])
+
+            self.cat_datas = {}
+            for key in mo_dict['cat_datas']:
+                self.cat_datas[key] = CatData(cd_dict=mo_dict['cat_datas'][key])
+
+            self.block_methods = {}
+            for key in mo_dict['block_methods']:
+                self.block_methods[key] = BlockMethodData(bmd_dict=mo_dict['block_methods'][key])
 
     def post_notification(self, notification, poster, selector):
         if notification not in self.notification_poster:
@@ -1527,3 +1612,73 @@ class MachObject:
                     total_sect_count += 1
                     section_pointer += section.get_size()
         return sections
+
+    def convert_to_dict(self):
+        mach_object_dict = {
+            'type': self.type,  # Number
+            'dylib_frameworks_path': self.dylib_frameworks_path,  # list
+            'dylib_frameworks_pair': self.dylib_frameworks_pair,  # dict -> str
+            'notification_handler': self.notification_handler,  # dict -> str
+            'notification_poster': self.notification_poster,  # dict -> str
+            'offset': self.offset,  # Number
+            'is_64_bit': self.is_64_bit,  # Number
+            'cpu_type': self.cpu_type,  # Number
+            'cpu_subtype': self.cpu_subtype,  # Number
+            'file_type': self.file_type,  # Number
+            'ncmds': self.ncmds,  # Number
+            'text_addr': self.text_addr,  # Number
+            'symbols': self.symbols,  # dict -> str
+            'dylibs': self.dylibs,  # dict -> str
+            'functions': self.functions,  # dict -> str
+            'statics': self.statics,  # dict -> str
+            'statics_class': self.statics_class,  # dict -> str
+
+            # 删去 $，因为 key 中不能有 $
+            'class_methods': str(self.class_methods),  # dict -> str
+            'methods': self.methods,
+
+            'class_name_address': self.class_name_address,
+            'cfstrings': self.cfstrings,
+            'ivar_refs': self.ivar_refs,
+            'ivars': self.ivars,
+
+            'dylib_frameworks_mach': {},
+            '_cmds': {},
+            '_sections': {},
+            'methods_type': {},
+            'class_datas': {},
+            'cat_datas': {},
+            'block_methods': {},
+
+            'bytes': self.bytes,
+            'text': self.text
+        }
+
+        for path_name in self.dylib_frameworks_mach:
+            mach_object_dict['dylib_frameworks_mach'][path_name] = self.dylib_frameworks_mach[path_name].convert_to_dict()
+
+        for key in self._cmds:
+            if key not in mach_object_dict['_cmds']:
+                mach_object_dict['_cmds'][key] = []
+            for offset, cmd in self._cmds[key]:
+                mach_object_dict['_cmds'][key].append((offset, cmd.convert_to_dict()))
+
+        for key in self._sections:
+            section, index = self._sections[key]
+            mach_object_dict['_sections'][key] = (section.convert_to_dict(), index)
+
+        methods_type_dict = {}
+        for key in self.methods_type:
+            methods_type_dict[key] = self.methods_type[key].convert_to_dict()
+        mach_object_dict['methods_type'] = str(methods_type_dict)
+
+        for key in self.class_datas:
+            mach_object_dict['class_datas'][key] = self.class_datas[key].convert_to_dict()
+
+        for key in self.cat_datas:
+            mach_object_dict['cat_datas'][key] = self.cat_datas[key].convert_to_dict()
+
+        for key in self.block_methods:
+            mach_object_dict['block_methods'][key] = self.block_methods[key].convert_to_dict()
+
+        return mach_object_dict

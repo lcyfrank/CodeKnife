@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Analysis</title>
+    <!-- 最新版本的 Bootstrap 核心 CSS 文件 -->
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="/static/css/analysis.css">
+    <script src="/static/js/bootstrap.min.js"></script>
+    <script src="/static/js/jquery.min.js"></script>
+</head>
+<body>
+<nav class="navbar navbar-light bg-light">
+    <a class="navbar-brand">
+        <img src="/static/imgs/icon.png" class="d-inline-block align-top" height="30" alt="">
+        CodeKnife
+    </a>
+    <span class="badge badge-primary">beta</span>
+</nav>
+<div class="row" style="min-height: 100%;">
+    <div class="v-navbar">
+        <h3 class="v-navbar-section">
+            Analysis Result
+        </h3>
+        <ul class="v-navbar-list">
+            <li class="v-navbar-item">
+                <a class="v-navbar-item-content" href="/analysis/basic/{{md5}}">
+                    Basic Information
+                </a>
+            </li>
+            <li class="v-navbar-item active">
+                <a class="v-navbar-item-content" href="/analysis/binary/{{md5}}">
+                    Binary
+                </a>
+            </li>
+        </ul>
+    </div>
+    <div>
+        {{ mach_info }}
+    </div>
+    <div class="analysis-loading">
+        <div class="spinner-border" style="width: 3rem; height: 3rem;" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+        <div class="analysis-loading-tips">
+            <span>Analyse information from binary...</span>
+        </div>
+        <div class="analysis-loading-status" id="binary-analysis-status">
+            <span>Please wait</span>
+        </div>
+    </div>
+</div>
+̵
+<script>
+    let binary_complete = '{{complete}}';
+    let file_md5 = '{{md5}}';
+    console.log(binary_complete);
+    if (binary_complete == 0 || binary_complete == 1) {
+        process_request = setInterval(function () {
+            $.ajaxSettings.async = false;
+            $.getJSON("/analysis/binary/pre_process?md5=" + file_md5, function (result) {
+                msg_data = result['data'];
+                msg = msg_data['msg'];
+                processing = msg_data['processing'];
+                if (!processing) {
+                    clearInterval(process_request);
+                    // location.reload();
+                }
+                $('div#binary-analysis-status span').text(msg);
+                console.log(msg);
+            });
+        }, 1000);
+    }
+</script>
+</body>
+</html>

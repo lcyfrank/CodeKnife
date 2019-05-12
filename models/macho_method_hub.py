@@ -1,5 +1,6 @@
 from models.inner_instruction import MethodInstructions
 
+
 class MachoMethodHub:
 
     def __init__(self):

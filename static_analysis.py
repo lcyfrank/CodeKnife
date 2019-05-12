@@ -5,7 +5,7 @@ from datetime import datetime
 from multiprocessing import Pool, Lock, Manager
 from models.inner_instruction import *
 from cfg_generator import *
-from utils import sorted_list_for_hex_string
+from utils import sorted_list_for_hex_string, md5_for_file
 from tqdm import tqdm
 from checker.paste_checker import *
 from checker.storage_checker import *
@@ -13,6 +13,8 @@ from checker.keychain_checker import *
 from checker.background_checker import *
 from checker.hotfix_checker import *
 import os, shutil
+from models.mongo_storage import *
+from queue import Queue
 
 # Constant
 FA_CPU_TYPE_KEY = 'cputype'
@@ -69,6 +71,9 @@ def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_addr
         progress_bar.update(4)
         temp_machine_code = machine_code[last_addr - base_addr:]
         for insn in model.disasm(temp_machine_code, last_addr):
+            # !!!!!!
+            # !!!!!! 这里的 insn 换成自己定义的类
+            # !!!!!!
             last_addr = insn.address
             progress_bar.update(4)
             if last_addr < slice_addr:
@@ -796,6 +801,77 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
                 method_instructions.add_data_flow_from_instruction(from_item, to_item, position)
     return method_instructions
 
+
+def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue=None):
+    global _g_current_context
+    binary_md5 = md5_for_file(binary_file)
+
+    # 用来获取动态库二进制文件
+    def macho_file_provider(file_path):
+        if '/' in binary_file:
+            path_components = binary_file.split('/')
+            path_components = path_components[:-1]
+            path = '/'.join(path_components)
+            file_path = path + '/' + file_path
+            return open(file_path, 'rb')
+        else:
+            return open(file_path, 'rb')
+
+    mach_o_file = open(binary_file, 'rb')
+    if arch == 0:
+        mode = Analyse_64_Bit
+    elif arch == 1:
+        mode = Analyse_32_Bit
+    else:
+        mode = Analyse_Both
+
+    # Parse the mach-o information
+    msg_queue.put('Open binary successfully')
+    msg_queue.put('Start analyzing the information of Mach-O file')
+    mach_container = load_mach_info_of_md5(binary_md5)
+    if mach_container is None:
+        mach_container = MachContainer(mach_o_file.read(), file_provider=macho_file_provider, mode=mode)
+        store_md5_with_mach_info(binary_md5, mach_container)
+    else:
+        for mach_info in mach_container.mach_objects:
+            mach_info.file_provider = macho_file_provider
+    msg_queue.put('Analyze Mach-O file finish')
+
+    for mach_info in mach_container.mach_objects:
+        arch = CS_ARCH_ALL
+        mode = CS_MODE_32
+        if mach_info.cpu_type == CPU_TYPE_ARM:
+            arch = CS_ARCH_ARM
+            mode = CS_MODE_THUMB
+        elif mach_info.cpu_type == CPU_TYPE_ARM64:
+            arch = CS_ARCH_ARM64
+            mode = CS_MODE_ARM
+        elif mach_info.cpu_type == CPU_TYPE_X86_64:
+            arch = CS_ARCH_X86
+            mode = CS_MODE_32 if not mach_info.is_64_bit else CS_MODE_64
+        _g_current_context = (arch, mode)
+
+        slice_addresses = list(mach_info.methods.keys())
+        slice_addresses += list(mach_info.functions.keys())
+
+        sorted_slice_addresses = sorted_list_for_hex_string(slice_addresses)
+
+        # Start disassemble all methods
+        method_hub = MachoMethodHub()  # 对于每一个架构都有一个
+        methods_hubs.append(method_hub)
+        msg_queue.put('Start disassemble all methods')
+        method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr,
+                                                           sorted_slice_addresses, method_hub=method_hub)
+        # Disassemble complete
+        msg_queue.put('Disassemble all methods complete')
+        # Start analyse method
+        msg_queue.put('Start analyzing all methods')
+        for method_instruction in method_instructions:
+            _analyse_method(method_instruction, mach_info, method_hub=method_hub)
+        msg_queue.put('Analyze all methods complete')
+
+        print(list(method_hub.cs_insns.values())[0][0].__dict__)
+        # queue.put(method_hub)
 
 # 0 means 64-bit
 # 1 means 32-bit

@@ -126,3 +126,18 @@ class Instruction:
 
     def block_callback(self, block_name):
         self.block_data.append(('$Block', block_name))
+
+
+class CSInstruction:
+
+    def __init__(self):
+        self.address = 0
+        self.id = 0
+        self.operands = []
+
+
+class CSOperand:
+
+    def __init__(self):
+        self.type = 0
+        self.imm = 0

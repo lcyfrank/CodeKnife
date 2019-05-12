@@ -148,3 +148,16 @@ body {
 .item-table td:last-child {
     border-right: none;
 }
+
+.analysis-loading {
+    margin-left: auto;
+    margin-top: auto;
+    margin-right: auto;
+    margin-bottom: auto;
+    text-align: center;
+}
+
+.analysis-loading-status {
+    color: gray;
+    font-size: 12px;
+}
