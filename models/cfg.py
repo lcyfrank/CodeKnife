@@ -1,4 +1,5 @@
 from graphviz import Digraph, Graph
+from json import JSONEncoder
 import os
 
 CFGNodeTypeFunction = 0
@@ -24,44 +25,10 @@ class CFG:
             if block.name == name:
                 return block
         return None
-    # if the data flow between the no.0 node and no.1 node
-    # the index should be 0
-    # def modify_data_flow(self, index, data_flow):
-    #     node_count = len(self.nodes)
-    #     if node_count - 1 > index:
-    #         if index < len(self.data_flows):
-    #             self.data_flows[index] = data_flow
-    #         else:
-    #             for i in range(index):
-    #                 self.data_flows.append(None)
-    #             self.data_flows.append(data_flow)
-    #     else:
-            # print('Data flow index error!')
 
     def describe(self):
         for block in self.all_blocks:
             block.describe()
-
-    # def graphviz_block(self, block, graphviz_cfg):
-    #
-    #     oc_block_cfgs = []
-    #     node_name = block.name
-    #     node_label = ''
-    #     for node in block.nodes:
-    #         node_label += node.describe(False)[1:-1]
-    #         node_label += '\n'
-    #         for oc_block_cfg in node.oc_blocks:
-    #             oc_block_cfgs.append(oc_block_cfg)
-    #     if len(node_label) == 0:
-    #         node_label = '{NON_API_CALLED}'
-    #     graphviz_cfg.node(node_name, node_label, shape='box')
-    #
-    #     for oc_block_cfg in oc_block_cfgs:
-    #         for block in oc_block_cfg.all_blocks:
-    #             if block == oc_block_cfg.entry:
-
-
-        # return node_name
 
     def graphviz_obj(self, graphviz_cfg):
         # print(len(self.all_blocks))
@@ -97,52 +64,6 @@ class CFG:
                 else:
                     graphviz_cfg.edge(block.name, follow)
 
-        # return graphviz_cfg
-
-        # block_nodes = {}
-        # cfg_view = Digraph(self.name)
-        # # cfg_view.node('entry', 'entry')
-        #
-        # for block in self.all_blocks:
-        #     block_view = Digraph('cluster' + block.name)
-        #     if len(block.nodes) == 0:
-        #         node_name = 'node' + block.name
-        #         block_view.node(node_name, '', shape='plaintext')
-        #         block_nodes[block.name] = (node_name, node_name)
-        #     else:
-        #         start_name = None
-        #         end_name = None
-        #         before_name = None
-        #         for node in block.nodes:
-        #             if type(node) == CFG:
-        #                 pass
-        #                 # recursive_cfg = node.graphviz_obj()
-        #                 # block_view.subgraph(recursive_cfg)
-        #
-        #             elif type(node) == CFGNode:
-        #                 node_name = block.name + str(block.nodes.index(node))
-        #                 node_label = node.describe(False)
-        #                 block_view.node(node_name, node_label, shape='box')
-        #                 if before_name is not None:
-        #                     block_view.edge(before_name, node_name)
-        #                 before_name = node_name
-        #                 if start_name is None:
-        #                     start_name = node_name
-        #                 if block == self.all_blocks[-1]:
-        #                     end_name = end_name
-        #         block_nodes[block.name] = (start_name, end_name)
-        #
-        #     cfg_view.subgraph(block_view)
-        #
-        # # cfg_view.edge('entry', 'cluster' + self.entry.name)
-        #
-        # for block in self.all_blocks:
-        #     _, first_name = block_nodes[block.name]
-        #     for follow in block.follow_blocks:
-        #         second_name, _ = block_nodes[follow]
-        #         cfg_view.edge(first_name, second_name)
-        # return cfg_view
-
     def view(self):
         graphviz_cfg = Digraph(self.name)
         self.graphviz_obj(graphviz_cfg)
@@ -155,13 +76,26 @@ class CFG:
         graphviz_cfg.format = 'png'
         graphviz_cfg.render(os.path.join(path, self.name + 'gv'), view=False)
 
+    def convert_to_dict(self):
+        cfg_dict = {'name': self.name}
+        cfg_dict['entry'] = self.entry.convert_to_dict()
+        out_list = []
+        for out_block in self.outs:
+            out_list.append(out_block.convert_to_dict())
+        cfg_dict['outs'] = out_list
+        all_blocks = []
+        for block in self.all_blocks:
+            all_blocks.append(block.convert_to_dict())
+        cfg_dict['all_blocks'] = all_blocks
+        return cfg_dict
+
 
 class CFGBlock:
 
     def __init__(self, name):
         self.name = name
         self.out = False  # if this block contains `ret` instruction
-        self.nodes = []  # node 包括 node 或者 cfg
+        self.nodes = []  # node
         self.follow_blocks = []  # the blocks follow this block (name)
         self.follow_label = {}   # the follow label {name: label}
 
@@ -181,6 +115,15 @@ class CFGBlock:
             print('\/')
         if len(self.nodes) > 0:
             self.nodes[-1].describe()
+
+    def convert_to_dict(self):
+        cfg_block_dict = {'name': self.name, 'out': self.out,
+                          'follow_blocks': self.follow_blocks, 'follow_label': self.follow_label}
+        node_list = []
+        for node in self.nodes:
+            node_list.append(node.convert_to_dict())
+        cfg_block_dict['nodes'] = node_list
+        return cfg_block_dict
 
 
 class CFGNode:
@@ -209,6 +152,10 @@ class CFGNode:
             describe = '<' + self.class_name + ': ' + self.method_name + '>'
         return describe
 
+    def convert_to_dict(self):
+        node_dict = {'type': self.type, 'class_name': self.class_name, 'method_name': self.method_name,
+                     'function_name': self.function_name}
+        return node_dict
 
 class CFGDataFlow:
 

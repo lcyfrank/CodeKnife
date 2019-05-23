@@ -4,10 +4,24 @@ MethodDataFlowTypeInstruction = 1  # 从指令返回值转过来的
 
 class MethodDataFlow:
 
-    def __init__(self, type, source):
-        self.type = type
-        self.source = source
-        self.flow_to = []  # 数据流传向
+    def __init__(self, _type=0, source=None, mdf_dict=None):
+        if mdf_dict is None:
+            self.type = _type
+            self.source = source
+            self.flow_to = []  # 数据流传向
+        else:
+            self.type = mdf_dict['type']
+            if self.type == MethodDataFlowTypeParameters:
+                self.source = mdf_dict['source']
+            else:
+                self.source = Instruction(ins_dict=mdf_dict['source'])
+            self.flow_to = []
+            flow_to_list = eval(mdf_dict['flow_to'])
+            for to_item, position in flow_to_list:
+                if type(to_item) == dict:
+                    self.flow_to.append((Instruction(ins_dict=to_item), position))
+                else:
+                    self.flow_to.append((to_item, position))
 
     def flow(self, instruction, position):  # 流向的指令，position 是指参数的位置，调用者为 0
         self.flow_to.append((instruction, position))
@@ -36,18 +50,46 @@ class MethodDataFlow:
                     to_str = '<' + hex(to_item.address) + '>' + ' ' + cls + ': ' + mtd + '(' + str(position) + ')'
                     print('\t%s -> %s' % (from_str, to_str))
 
+    def convert_to_dict(self):
+        mdf_dict = {
+            'type': self.type
+        }
+        if self.type == MethodDataFlowTypeParameters:
+            mdf_dict['source'] = self.source
+        else:
+            mdf_dict['source'] = self.source.convert_to_dict()
+
+        flow_to_list = []
+        for to_item, position in self.flow_to:
+            if type(to_item) == str:
+                flow_to_list.append((to_item, position))
+            else:
+                flow_to_list.append((to_item.convert_to_dict(), position))
+        mdf_dict['flow_to'] = str(flow_to_list)
+        return mdf_dict
+
 
 class MethodBasicBlockInstructions:
 
-    def __init__(self, identify):
-        self.identify = identify
-        self.instructions = []
+    def __init__(self, identify=None, mbbi_dict=None):
+        if mbbi_dict is None:
+            self.identify = identify
+            self.instructions = []
 
-        self.jump_to_block = None  # identify
-        self.jump_condition = None  # 跳转条件，字符串
+            self.jump_to_block = None  # identify
+            self.jump_condition = None  # 跳转条件，字符串
 
-        self.is_return = False
-        self.next_block = None  # identify
+            self.is_return = False
+            self.next_block = None  # identify
+        else:
+            self.identify = mbbi_dict['identify']
+            self.jump_to_block = mbbi_dict['jump_to_block']
+            self.jump_condition = mbbi_dict['jump_condition']
+            self.is_return = mbbi_dict['is_return']
+            self.next_block = mbbi_dict['next_block']
+            self.instructions = []
+            for instruction_dict in mbbi_dict['instructions']:
+                self.instructions.append(Instruction(ins_dict=instruction_dict))
 
     def insert_instruction(self, instruction):
         self.instructions.append(instruction)
@@ -64,16 +106,41 @@ class MethodBasicBlockInstructions:
             else:
                 print(ins_str)
 
+    def convert_to_dict(self):
+        mbbi_dict = {'identify': self.identify, 'jump_to_block': self.jump_to_block,
+                     'jump_condition': self.jump_condition, 'is_return': self.is_return,
+                     'next_block': self.next_block, 'instructions': []}
+        for instruction in self.instructions:
+            mbbi_dict['instructions'].append(instruction.convert_to_dict())
+
+        return mbbi_dict
+
 
 class MethodInstructions:
 
-    def __init__(self, class_name, method_name):
-        self.class_name = class_name
-        self.method_name = method_name
-        self.return_type = []  # 存储当前方法的返回值，list 类型是因为可能会出现不同的执行路径产生不同的返回值
-        self.entry_block = None
-        self.all_blocks = {}  # <identity: block>  这个 Block 也不是 OC 的 Block
-        self.data_flows: {str: MethodDataFlow} = {}  # MethodDataFlow
+    def __init__(self, class_name=None, method_name=None, mi_dict=None):
+        if mi_dict is None:
+            self.class_name = class_name
+            self.method_name = method_name
+            self.return_type = []  # 存储当前方法的返回值，list 类型是因为可能会出现不同的执行路径产生不同的返回值
+            self.entry_block = None
+            self.all_blocks = {}  # <identity: block>  这个 Block 也不是 OC 的 Block
+            self.data_flows: {str: MethodDataFlow} = {}  # MethodDataFlow
+        else:
+            self.class_name = mi_dict['class_name']
+            self.method_name = mi_dict['method_name']
+            self.return_type = mi_dict['return_type']
+            self.entry_block = MethodBasicBlockInstructions(mbbi_dict=mi_dict['entry_block'])
+            self.all_blocks = {}
+            for identity in mi_dict['all_blocks']:
+                self.all_blocks[identity] = MethodBasicBlockInstructions(mbbi_dict=mi_dict['all_blocks'][identity])
+            self.data_flows = {}
+            data_flows_dict = eval(mi_dict['data_flows'])
+            for data_flow_key in data_flows_dict:
+                if data_flow_key.startswith('Parameter'):
+                    self.data_flows[data_flow_key] = MethodDataFlow(mdf_dict=data_flows_dict[data_flow_key])
+                else:
+                    self.data_flows[Instruction(ins_dict=eval(data_flow_key))] = MethodDataFlow(mdf_dict=data_flows_dict[data_flow_key])
 
     def describe(self):
         print("<%s: %s>" % (self.class_name, self.method_name))
@@ -114,22 +181,53 @@ class MethodInstructions:
         data_flow.flow('Out', 0)
 
     def convert_to_dict(self):
-        pass
+        mi_dict = {
+            'class_name': self.class_name,
+            'method_name': self.method_name,
+            'return_type': self.return_type,
+            'entry_block': self.entry_block.convert_to_dict(),
+            'all_blocks': {},
+            'data_flows': None
+        }
+        for identify in self.all_blocks:
+            mi_dict['all_blocks'][identify] = self.all_blocks[identify].convert_to_dict()
+
+        data_flows = {}
+        for data_flow_key in self.data_flows:
+            if type(data_flow_key) == str:
+                print(data_flow_key)
+                data_flows[data_flow_key] = self.data_flows[data_flow_key].convert_to_dict()
+            else:
+                print(data_flow_key)
+                data_flows[str(data_flow_key.convert_to_dict())] = self.data_flows[data_flow_key].convert_to_dict()
+        mi_dict['data_flows'] = str(data_flows)
+        return mi_dict
 
 
 class Instruction:
 
-    def __init__(self, instruction: str):
-        self.address = 0
-        self.instruction = instruction
-        self.goto_insns: tuple = None  # tuple
-        self.block_data = []  # 这个 Block 代表 OC 的 Block
+    def __init__(self, instruction: str=None, ins_dict=None):
+        if ins_dict is None:
+            self.address = 0
+            self.instruction = instruction
+            self.goto_insns: tuple = None  # tuple
+            self.block_data = []  # 这个 Block 代表 OC 的 Block
+        else:
+            self.address = ins_dict['address']
+            self.instruction = ins_dict['instruction']
+            self.goto_insns = eval(ins_dict['goto_insns'])
+            self.block_data = eval(ins_dict['block_data'])
 
     def goto(self, class_name, method_name):
         self.goto_insns = (class_name, method_name)
 
     def block_callback(self, block_name):
         self.block_data.append(('$Block', block_name))
+
+    def convert_to_dict(self):
+        ins_dict = {'address': self.address, 'instruction': self.instruction,
+                    'goto_insns': str(self.goto_insns), 'block_data': str(self.block_data)}
+        return ins_dict
 
 
 class CSInstruction:
@@ -142,12 +240,14 @@ class CSInstruction:
             self.mnemonic = None
             self.bytes = None
             self.op_str = None
+            self.comment = None
         else:
             self.address = csi_dict['address']
             self.id = csi_dict['id']
             self.mnemonic = csi_dict['mnemonic']
             self.bytes = bytes.fromhex(csi_dict['bytes'])
             self.op_str = csi_dict['op_str']
+            self.comment = csi_dict['comment']
             self.operands = []
             for operand_dict in csi_dict['operands']:
                 self.operands.append(CSOperand(cso_dict=operand_dict))
@@ -159,7 +259,8 @@ class CSInstruction:
             'operands': [],
             'mnemonic': self.mnemonic,
             'bytes': self.bytes.hex(),
-            'op_str': self.op_str
+            'op_str': self.op_str,
+            'comment': self.comment
         }
 
         for operand in self.operands:

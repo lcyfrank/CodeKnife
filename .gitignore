@@ -7,3 +7,5 @@ __pycache__
 .idea
 Demos
 cfgs
+view/data/
+view/upload/

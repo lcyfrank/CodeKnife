@@ -1,0 +1,45 @@
+.code-editor {
+    width: 100%;
+    height: 50%;
+}
+
+.CodeMirror {
+    width: 100%;
+    height: 50%;
+}
+
+.editor-toolbar {
+    height: 45px;
+    width: 100%;
+}
+
+.editor-toolbar img {
+    float: right;
+    margin-top: 7px;
+    margin-right: 40px;
+    cursor: pointer;
+    padding: 3px;
+}
+
+.editor-toolbar img:hover {
+    padding: 2px;
+    border: 1px rgba(165, 165, 165, 0.44) solid;
+    border-radius: 5px;
+}
+
+.editor-file-name {
+    display: inline-block;
+    font-size: 17px;
+    font-weight: 500;
+    margin-left: 10px;
+    margin-top: 10px;
+}
+
+.checker-result {
+    padding-left: 20px;
+    padding-right: 20px;
+    padding-top: 20px;
+    font-family: Menlo, Monaco, Consolas, "Andale Mono", "lucida console", "Courier New", monospace;
+    font-size: 15px;
+    width: 100%;
+}

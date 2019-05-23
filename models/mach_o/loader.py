@@ -160,8 +160,11 @@ class LoadCommand(MachBase):
             return LoadDylibCommand.parse_from_dict(lc_dict)
         elif cmd == cls.LC_RPATH:
             return RpathCommand.parse_from_dict(lc_dict)
-        elif cmd == cls.LC_REQ_DYLD:
-            return None
+        else:
+            cmd_object = LoadCommand()
+            cmd_object.cmd = lc_dict['cmd']
+            cmd_object.cmdsize = lc_dict['cmdsize']
+            return cmd_object
 
     def get_size(self):
         return LoadCommand.LC_TOTAL_SIZE

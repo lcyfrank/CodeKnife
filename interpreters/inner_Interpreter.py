@@ -277,41 +277,43 @@ class Interpreter:
         i = begin
         if end == -1:
             end = len(codes)
+
+        results = []
         while i < end:
             insn = codes[i]
             if (insn.id == ARM64_INS_SUB or
                     insn.id == ARM64_INS_SBC):
-                self.handle_sub(insn)
+                results.append(self.handle_sub(insn))
             elif (insn.id == ARM64_INS_ADD or
                   insn.id == ARM64_INS_ADC):
-                self.handle_add(insn)
+                results.append(self.handle_add(insn))
             elif (insn.id == ARM64_INS_STP or
                   insn.id == ARM64_INS_STR or
                   insn.id == ARM64_INS_STUR):
-                self.handle_store_register(insn)
+                results.append(self.handle_store_register(insn))
             elif (insn.id == ARM64_INS_ADRP or
                   insn.id == ARM64_INS_ADR):
-                self.handle_adrp(insn)
+                results.append(self.handle_adrp(insn))
             elif (insn.id == ARM64_INS_LDR or
                   insn.id == ARM64_INS_LDUR):
-                self.handle_load_register(insn, length=8)
+                results.append(self.handle_load_register(insn, length=8))
             elif (insn.id == ARM64_INS_LDRSW or
                   insn.id == ARM64_INS_LDURSW):
-                self.handle_load_register(insn, length=4)
+                results.append(self.handle_load_register(insn, length=4))
             elif (insn.id == ARM64_INS_LDRH or
                   insn.id == ARM64_INS_LDRSH or
                   insn.id == ARM64_INS_LDURH or
                   insn.id == ARM64_INS_LDURSH):
-                self.handle_load_register(insn, length=2)
+                results.append(self.handle_load_register(insn, length=2))
             elif (insn.id == ARM64_INS_LDRB or
                   insn.id == ARM64_INS_LDRSB or
                   insn.id == ARM64_INS_LDURB or
                   insn.id == ARM64_INS_LDURSB):
-                self.handle_load_register(insn, length=1)
+                results.append(self.handle_load_register(insn, length=1))
             elif (insn.id == ARM64_INS_LDP or
                   insn.id == ARM64_INS_LDPSW or
                   insn.id == ARM64_INS_LDNP):
-                self.handle_load_pair(insn)
+                results.append(self.handle_load_pair(insn))
             elif (insn.id == ARM64_INS_MOV or
                   insn.id == ARM64_INS_MOVK or
                   insn.id == ARM64_INS_MOVN or
@@ -319,17 +321,18 @@ class Interpreter:
                   insn.id == ARM64_INS_FMOV or
                   insn.id == ARM64_INS_SMOV or
                   insn.id == ARM64_INS_UMOV):
-                self.handle_move(insn)
+                results.append(self.handle_move(insn))
             elif (insn.id == ARM64_INS_ORR or
                   insn.id == ARM64_INS_ORN):
-                self.handle_orr(insn)
+                results.append(self.handle_orr(insn))
             elif insn.id == ARM64_INS_AND:
-                self.handle_and(insn)
+                results.append(self.handle_and(insn))
             elif (insn.id == ARM64_INS_CMP or
                   insn.id == ARM64_INS_CMN or
                   insn.id == ARM64_INS_TST):
-                self.handle_cmp(insn)
+                results.append(self.handle_cmp(insn))
             i += 1
+        return results
 
     def get_register(self, name):
         if name == "sp":
@@ -448,6 +451,7 @@ class Interpreter:
             self.tracking[reg_name] = tracking
             register = self.get_register(reg_name)
             register.value = result
+        return result
 
     def handle_and(self, insn):
         tracking = []
@@ -468,6 +472,7 @@ class Interpreter:
             self.tracking[reg_name] = tracking
             register = self.get_register(reg_name)
             register.value = result
+        return result
 
     def handle_move(self, insn):
         tracking = []
@@ -507,6 +512,7 @@ class Interpreter:
             self.context.mov_regs(context_src_register, context_dst_register)
         dest_register.value = source_value
         self.tracking[dest_register_name] = tracking
+        return source_value
 
     def handle_load_register(self, insn, length=8):
         tracking = []
@@ -521,6 +527,8 @@ class Interpreter:
             memory_disp = memory_operand.disp
             memory = memory_reg.value + memory_disp
         tracking.append('[' + str(memory) + ']')
+
+        return_results = []
         for j in range(0, len(insn.operands) - 1):
             operand = insn.operands[j]
             if operand.type == ARM64_OP_REG:
@@ -545,6 +553,7 @@ class Interpreter:
                     memory_value = memory_value & wrap
                     self.memory[hex(memory + j * length)] = memory_value
                     register.value = self.memory[hex(memory + j * length)]
+                return_results.append(register.value)
 
                 if type(register) == Register:
                     if register in self.gen_regs:
@@ -555,9 +564,10 @@ class Interpreter:
                     context_register = 'float_' + str(self.float_regs.index(register))
                 self.context.ldr_memory(hex(memory + j * length), context_register)
                 self.tracking[reg_name] = tracking
+        return return_results[0]
 
     def handle_load_pair(self, insn):
-        self.handle_load_register(insn)
+        return self.handle_load_register(insn)
 
     def handle_store_register(self, insn, length=8):
         memory_operand = insn.operands[-1].mem
@@ -592,7 +602,7 @@ class Interpreter:
                     self.store_notify(hex(memory + j * length), register.value)
 
     def handle_store_pair(self, insn):
-        self.handle_store_register(insn)
+        return self.handle_store_register(insn)
 
     def handle_add(self, insn):
         tracking = []
@@ -608,7 +618,7 @@ class Interpreter:
                     self.tracking[reg_name] = [reg_name_2]
                     register = self.get_register(reg_name)
                     register.value = register_2.value
-                return
+                return register.value
 
         result = 0
         for j in range(1, len(insn.operands)):
@@ -628,6 +638,7 @@ class Interpreter:
             register = self.get_register(reg_name)
             # register.is_memory_content = False
             register.value = result
+        return result
 
     def handle_sub(self, insn):
         tracking = []
@@ -657,6 +668,7 @@ class Interpreter:
             self.tracking[reg_name] = tracking
             register = self.get_register(reg_name)
             register.value = result
+        return result
 
     def handle_adrp(self, insn):
         value = insn.operands[1].imm
@@ -665,3 +677,4 @@ class Interpreter:
         register.value = value
         if reg_name in self.tracking:
             del self.tracking[reg_name]
+        return value

@@ -19,7 +19,7 @@ Analyse_Both = 2
 
 class MachContainer:
 
-    def __init__(self, _bytes=None, file_provider=None, mode=Analyse_64_Bit, mc_dict=None):
+    def __init__(self, _bytes=None, file_provider=None, mode=Analyse_64_Bit):
 
         if _bytes is not None:
             self.file_provider = file_provider
@@ -60,11 +60,9 @@ class MachContainer:
         else:
             self.file_provider = None
             self.bytes = None
-            self.is_fat = mc_dict['is_fat']
-            self.nfat_arch = mc_dict['nfat_arch']
+            self.is_fat = False
+            self.nfat_arch = 0
             self.mach_objects = []
-            for mach_object_dict in mc_dict['mach_objects']:
-                self.mach_objects.append(MachObject(mo_dict=mach_object_dict))
 
     def aple_header(self):
         header_bytes = self.bytes[0:FatHeader.FH_TOTAL_SIZE]
@@ -97,7 +95,7 @@ MachObjectTypeDylib = 1
 
 class MachObject:
 
-    def __init__(self, _bytes=None, _type=MachObjectTypeExecutable, _offset=0x0, file_provider=None, mo_dict=None):
+    def __init__(self, _bytes=None, _type=MachObjectTypeExecutable, _offset=0x0, file_provider=None):
         if _bytes is not None:
             self.type = _type
             self.file_provider = file_provider
@@ -155,6 +153,7 @@ class MachObject:
 
             self.class_name_address = {}  # name: data_address
             self.class_datas = {}       # data_address: < name, super_name, methods >
+            self.cat_datas_address = {}  # (class, name): data_address
             self.cat_datas = {}         # data_address: < name, class_name, methods >
 
             # 解析 Block
@@ -190,70 +189,42 @@ class MachObject:
         else:
             self.functions_type = []
 
-            self.type = mo_dict['type']
-            self.dylib_frameworks_path = mo_dict['dylib_frameworks_path']
-            self.dylib_frameworks_pair = mo_dict['dylib_frameworks_pair']
-            self.notification_handler = mo_dict['notification_handler']
-            self.notification_poster = mo_dict['notification_poster']
-            self.offset = mo_dict['offset']
-            self.is_64_bit = mo_dict['is_64_bit']
-            self.cpu_type = mo_dict['cpu_type']
-            self.cpu_subtype = mo_dict['cpu_subtype']
-            self.file_type = mo_dict['file_type']
-            self.ncmds = mo_dict['ncmds']
-            self.text_addr = mo_dict['text_addr']
-            self.symbols = mo_dict['symbols']
-            self.dylibs = mo_dict['dylibs']
-            self.functions = mo_dict['functions']
-            self.statics = mo_dict['statics']
-            self.statics_class = mo_dict['statics_class']
+            self.type = 0
+            self.dylib_frameworks_path = None
+            self.dylib_frameworks_pair = None
+            self.notification_handler = None
+            self.notification_poster = None
+            self.offset = 0
+            self.is_64_bit = False
+            self.cpu_type = 0
+            self.cpu_subtype = 0
+            self.file_type = 0
+            self.ncmds = 0
+            self.text_addr = 0
+            self.symbols = None
+            self.dylibs = None
+            self.functions = None
+            self.statics = None
+            self.statics_class = None
 
-            self.class_methods = eval(mo_dict['class_methods'])
-            self.methods = mo_dict['methods']
-            self.class_name_address = mo_dict['class_name_address']
-            self.cfstrings = mo_dict['cfstrings']
-            self.ivar_refs = mo_dict['ivar_refs']
-            self.ivars = mo_dict['ivars']
+            self.class_methods = None
+            self.methods = None
+            self.class_name_address = None
+            self.cat_datas_address = None
+            self.cfstrings = None
+            self.ivar_refs = None
+            self.ivars = None
 
-            self.bytes = mo_dict['bytes']
-            self.text = mo_dict['text']
+            self.bytes = None
+            self.text = None
 
             self.dylib_frameworks_mach = {}
-            for path_name in self.dylib_frameworks_mach:
-                self.dylib_frameworks_mach[path_name] = MachObject(mo_dict=mo_dict['dylib_frameworks_mach'])
-
             self._cmds = {}
-            for key in mo_dict['_cmds']:
-                if key not in self._cmds:
-                    self._cmds[key] = []
-                for offset, cmd in mo_dict['_cmds'][key]:
-                    self._cmds[key].append((offset, LoadCommand.parse_from_dict(cmd)))
-
             self._sections = {}
-            for key in mo_dict['_sections']:
-                section_dict, index = mo_dict['_sections'][key]
-                if self.is_64_bit:
-                    section = Section64.parse_from_dict(section_dict)
-                else:
-                    section = Section.parse_from_dict(section_dict)
-                self._sections[key] = (section, index)
-
             self.methods_type = {}
-            methods_type_dict = eval(mo_dict['methods_type'])
-            for key in methods_type_dict:
-                self.methods_type[key] = MethodData(md_dict=methods_type_dict[key])
-
             self.class_datas = {}
-            for key in mo_dict['class_datas']:
-                self.class_datas[key] = ClassData(cd_dict=mo_dict['class_datas'][key])
-
             self.cat_datas = {}
-            for key in mo_dict['cat_datas']:
-                self.cat_datas[key] = CatData(cd_dict=mo_dict['cat_datas'][key])
-
             self.block_methods = {}
-            for key in mo_dict['block_methods']:
-                self.block_methods[key] = BlockMethodData(bmd_dict=mo_dict['block_methods'][key])
 
     def post_notification(self, notification, poster, selector):
         if notification not in self.notification_poster:
@@ -762,21 +733,40 @@ class MachObject:
                     property_name = self.symbols[hex(objc_property.name)]
                     # print(class_name)
                     # print(property_name)
-                    property_attributes = self.symbols[(hex(objc_property.attributes))]
-                    if "@" in property_attributes:
-                        property_attributes_begin = property_attributes.find(
-                            "@\"") + 2
-                        property_attributes_end = property_attributes.find(
-                            "\"", property_attributes_begin)
-                        property_attributes = property_attributes[
-                            property_attributes_begin:property_attributes_end]
-                    else:
-                        property_attributes = ""
-                    _property = PropertyData(property_name, property_attributes)
+                    property_type = self.symbols[(hex(objc_property.attributes))]
+
+                    property_type = property_type[1:]
+                    property_type_segments = property_type.split(',')
+
+                    property_type = self.get_type_of_type_encoding(property_type_segments[0])
+                    if '@' not in property_type_segments[0]:
+                        property_type = '#' + property_type
+                    attributes = []
+                    for i in range(1, len(property_type_segments)):
+                        attribute_code = property_type_segments[i]
+                        if attribute_code == 'R':
+                            attributes.append('readonly')
+                        elif attribute_code == 'C':
+                            attributes.append('copy')
+                        elif attribute_code == '&':
+                            attributes.append('retain')
+                        elif attribute_code == 'N':
+                            attributes.append('nonatomic')
+                        elif attribute_code[0] == 'G':
+                            attributes.append('getter=' + attribute_code[1:])
+                        elif attribute_code[0] == 'S':
+                            attributes.append('setter=' + attribute_code[1:])
+                        elif attribute_code == 'W':
+                            attributes.append('weak')
+                        else:
+                            continue
+
+                    _property = PropertyData(property_name, property_type, attributes)
                     cat_data.insert_property(_property)
                 # property_key = hex(op_bytes_begin + 0x100000000 if self.is_64_bit else op_bytes_begin)
                 # self.properties[hex(property_key)] = _property
                 # self.property_refs[]
+            self.cat_datas_address[(cat_data._class, cat_data.name)] = parse_int(cat_bytes)
             self.cat_datas[hex(parse_int(cat_bytes))] = cat_data
             count += 1
 
@@ -785,61 +775,58 @@ class MachObject:
         type_list = []
         position_list = []
 
-        type_encoding = {
-            '@': 'id', '#': 'Class', ':': 'SEL',
-            'c': 'Char', 'i': 'Integer', 's': 'Integer',
-            'l': 'Integer', 'q': 'Integer', 'C': 'Char',
-            'I': 'Integer', 'S': 'Integer', 'L': 'Integer',
-            'Q': 'Integer', 'f': 'Float', 'd': 'Float',
-            'B': 'Bool', 'v': 'None', '*': 'Pointer'
-        }
-
         state_empty = 0
-        state_type = 1
         state_position = 2
 
         state = state_empty
         position_str = ''
-        type_str = ''
 
         i = 0
-
-        bracket_pair = {'{': '}', '[': ']', '(': ')'}
-        brackets_stack = []
 
         while i < len(signature):
             c = signature[i]
             if state == state_empty:
-                if c.isdigit():
+                if c.isdigit():  # 当前要求位置信息
                     state = state_position
                     position_str += c
                     i += 1
                 else:
-                    if c in type_encoding:
-                        type_list.append(type_encoding[c])
-                        i += 1
-                    elif c == '{' or c == '[' or c == '(':
-                        brackets_stack.append(c)
-                        state = state_type
-                        i += 1
-                    elif c == '^':  # 也是一个指针
-                        type_list.append('Pointer')
-                        i += 1
-                        c = signature[i]
-                        if c != '{' and c != '[' and c != '(':
-                            while not signature[i].isdigit():
-                                i += 1
-                        else:
-                            brackets_stack.append(c)
-                            i += 1
-                            while len(brackets_stack) > 0:
-                                if signature[i] == bracket_pair[brackets_stack[-1]]:
-                                    brackets_stack = brackets_stack[:-1]
-                                if signature[i] in bracket_pair:
-                                    brackets_stack.append(signature[i])
-                                i += 1
+                    start_index = i
+                    position = start_index
+
+                    bracket_pair = {'{': '}', '[': ']', '(': ')'}
+                    bracket_stack = []
+                    if signature[position] in bracket_pair:
+                        bracket_stack.append(signature[position])
+                        position += 1
+                        while position < len(signature) and len(bracket_stack) > 0:
+                            if signature[position] == bracket_pair[bracket_stack[-1]]:
+                                bracket_stack.pop(-1)
+                            elif signature[position] in bracket_pair:
+                                bracket_stack.append(signature[position])
+                            position += 1
+                    elif signature[position + 1] in bracket_pair:
+                        bracket_stack.append(signature[position + 1])
+                        position += 2
+                        while position < len(signature) and len(bracket_stack) > 0:
+                            if signature[position] == bracket_pair[bracket_stack[-1]]:
+                                bracket_stack.pop(-1)
+                            elif signature[position] in bracket_pair:
+                                bracket_stack.append(signature[position])
+                            position += 1
                     else:
-                        i += 1
+                        while position < len(signature):
+                            if not signature[position].isdigit():
+                                position += 1
+                            else:
+                                break
+                    return_type_str = self.get_type_of_type_encoding(signature[start_index: position])
+                    if return_type_str is None:
+                        return_type_str = ''
+                    else:
+                        return_type_str = '#' + return_type_str
+                    type_list.append(return_type_str)
+                    i = position
             elif state == state_position:
                 if c.isdigit():
                     position_str += c
@@ -848,24 +835,6 @@ class MachObject:
                     state = state_empty
                     position_list.append(int(position_str))
                     position_str = ''
-            elif state == state_type:
-                if c.isalnum() or c == '_':
-                    type_str += c
-                    i += 1
-                else:
-                    type_list.append(type_str)
-                    type_str = ''
-
-                    while len(brackets_stack) > 0:
-                        if signature[i] == bracket_pair[brackets_stack[-1]]:
-                            brackets_stack = brackets_stack[:-1]
-                        if signature[i] in bracket_pair:
-                            brackets_stack.append(signature[i])
-                        i += 1
-
-                    # while not signature[i].isdigit():
-                    #     i += 1
-                    state = state_empty
 
         if state == state_position:
             position_list.append(int(position_str))
@@ -880,7 +849,7 @@ class MachObject:
         return_type = type_list[-1]
         arguments = []
         if len(type_list) == 0:
-            return 'id', []
+            return '#id', []
         for i in range(len(type_list) - 1):
             arg_type = type_list[i]
             length = position_list[i + 1] - position_list[i]
@@ -920,6 +889,42 @@ class MachObject:
         else:
             objc_data = ObjcData.parse_from_bytes(od_bytes)
         return objc_class, objc_data
+
+
+    def get_type_of_type_encoding(self, type_str: str):
+
+        type_encoding = {
+            'c': 'char', 'i': 'int', 's': 'short',
+            'l': 'long', 'q': 'long long', 'C': 'unsigned char',
+            'I': 'unsigned int', 'S': 'unsigned short', 'L': 'unsigned long',
+            'Q': 'unsigned long long', 'f': 'float', 'd': 'double',
+            'B': 'bool', 'v': 'void', '*': 'char *'
+        }
+        if type_str[0] == 'r':
+            return 'const ' + self.get_type_of_type_encoding(type_str[1:])
+        if "@" in type_str:
+            if len(type_str) < 2:
+                return 'id'
+            objc_ivar_type_begin = type_str.find("@\"") + 2
+            objc_ivar_type_end = type_str.find(
+                "\"", objc_ivar_type_begin)
+            objc_ivar_type = type_str[objc_ivar_type_begin:objc_ivar_type_end]
+            return objc_ivar_type
+        elif '#' in type_str:
+            return 'Class'
+        elif ':' in type_str:
+            return 'SEL'
+        elif '^' in type_str:
+            objc_ivar_type = self.get_type_of_type_encoding(type_str[1:])
+            return objc_ivar_type + ' *'
+        elif type_str[0] == '[':
+            return type_str
+        elif type_str[0] == '{' or type_str[0] == '(':
+            last_index = type_str.find('=')
+            objc_ivar_type = type_str[1:last_index]
+            return objc_ivar_type
+        elif type_str in type_encoding:
+            return type_encoding[type_str]
 
     def parse_class_methods_and_data(self):
         # TO-DO: 添加 class_data 中的 properties
@@ -1068,13 +1073,11 @@ class MachObject:
                         objc_ivar = ObjcIvar.parse_from_bytes(oi_bytes)
                     objc_ivar_name = self.symbols[hex(objc_ivar.name)]
                     objc_ivar_type = self.symbols[hex(objc_ivar.type)]
-                    if "@" in objc_ivar_type:
-                        objc_ivar_type_begin = objc_ivar_type.find("@\"") + 2
-                        objc_ivar_type_end = objc_ivar_type.find(
-                            "\"", objc_ivar_type_begin)
-                        objc_ivar_type = objc_ivar_type[objc_ivar_type_begin:objc_ivar_type_end]
+                    if '@' in objc_ivar_type:
+                        objc_ivar_type = self.get_type_of_type_encoding(objc_ivar_type)
                     else:
-                        objc_ivar_type = ""
+                        objc_ivar_type = '#' + self.get_type_of_type_encoding(objc_ivar_type)
+
                     ivar = IvarData(objc_ivar_name, objc_ivar_type)
                     class_data.insert_ivar(ivar)
 
@@ -1123,22 +1126,32 @@ class MachObject:
 
                     property_name = self.symbols[hex(op.name)]
                     property_type = self.symbols[hex(op.attributes)]
-                    p_t_c = property_type[1]
-                    if p_t_c == '@':
-                        index = property_type.find('\"', 3)
-                        property_type = property_type[3:index]
-                    else:
-                        type_encoding = {
-                            '@': 'id', '#': 'Class', ':': 'SEL',
-                            'c': 'Char', 'i': 'Integer', 's': 'Integer',
-                            'l': 'Integer', 'q': 'Integer', 'C': 'Char',
-                            'I': 'Integer', 'S': 'Integer', 'L': 'Integer',
-                            'Q': 'Integer', 'f': 'Float', 'd': 'Float',
-                            'B': 'Bool', 'v': 'None', '*': 'Pointer'
-                        }
-                        if p_t_c in type_encoding:
-                            property_type = type_encoding[p_t_c]
-                    _property = PropertyData(property_name, property_type)
+                    property_type = property_type[1:]
+                    property_type_segments = property_type.split(',')
+
+                    property_type = self.get_type_of_type_encoding(property_type_segments[0])
+                    if '@' not in property_type_segments[0]:
+                        property_type = '#' + property_type
+                    attributes = []
+                    for i in range(1, len(property_type_segments)):
+                        attribute_code = property_type_segments[i]
+                        if attribute_code == 'R':
+                            attributes.append('readonly')
+                        elif attribute_code == 'C':
+                            attributes.append('copy')
+                        elif attribute_code == '&':
+                            attributes.append('retain')
+                        elif attribute_code == 'N':
+                            attributes.append('nonatomic')
+                        elif attribute_code[0] == 'G':
+                            attributes.append('getter=' + attribute_code[1:])
+                        elif attribute_code[0] == 'S':
+                            attributes.append('setter=' + attribute_code[1:])
+                        elif attribute_code == 'W':
+                            attributes.append('weak')
+                        else:
+                            continue
+                    _property = PropertyData(property_name, property_type, attributes)
                     class_data.insert_property(_property)
 
             # 解析超类
@@ -1505,6 +1518,8 @@ class MachObject:
             elif cmd.cmd == LoadCommand.LC_RPATH:
                 cmd = self.aple_rpath_cmd(lc_pointer)
                 self.insert_cmd("load_rpath", lc_pointer, cmd, cmds)
+            else:
+                self.insert_cmd("others", lc_pointer, cmd, cmds)
 
             lc_pointer += cmd.cmdsize
         return cmds
@@ -1616,10 +1631,6 @@ class MachObject:
     def convert_to_dict(self):
         mach_object_dict = {
             'type': self.type,  # Number
-            'dylib_frameworks_path': self.dylib_frameworks_path,  # list
-            'dylib_frameworks_pair': self.dylib_frameworks_pair,  # dict -> str
-            'notification_handler': self.notification_handler,  # dict -> str
-            'notification_poster': self.notification_poster,  # dict -> str
             'offset': self.offset,  # Number
             'is_64_bit': self.is_64_bit,  # Number
             'cpu_type': self.cpu_type,  # Number
@@ -1627,16 +1638,18 @@ class MachObject:
             'file_type': self.file_type,  # Number
             'ncmds': self.ncmds,  # Number
             'text_addr': self.text_addr,  # Number
+
+            'dylib_frameworks_path': self.dylib_frameworks_path,  # list
+            'dylib_frameworks_pair': str(self.dylib_frameworks_pair),  # dict -> str
+            'notification_handler': self.notification_handler,  # dict -> str
+            'notification_poster': self.notification_poster,  # dict -> str
             'symbols': self.symbols,  # dict -> str
             'dylibs': self.dylibs,  # dict -> str
             'functions': self.functions,  # dict -> str
             'statics': self.statics,  # dict -> str
             'statics_class': self.statics_class,  # dict -> str
-
-            # 删去 $，因为 key 中不能有 $
             'class_methods': str(self.class_methods),  # dict -> str
             'methods': self.methods,
-
             'class_name_address': self.class_name_address,
             'cfstrings': self.cfstrings,
             'ivar_refs': self.ivar_refs,
@@ -1650,8 +1663,8 @@ class MachObject:
             'cat_datas': {},
             'block_methods': {},
 
-            'bytes': self.bytes,
-            'text': self.text
+            # 'bytes': self.bytes,
+            # 'text': self.text
         }
 
         for path_name in self.dylib_frameworks_mach:

@@ -6,8 +6,10 @@
     <!-- 最新版本的 Bootstrap 核心 CSS 文件 -->
     <link rel="stylesheet" href="/static/css/bootstrap.min.css">
     <link rel="stylesheet" href="/static/css/analysis.css">
-    <script src="/static/js/bootstrap.min.js"></script>
+    <link rel="stylesheet" href="/static/css/binary.css">
     <script src="/static/js/jquery.min.js"></script>
+    <script src="/static/js/bootstrap.min.js"></script>
+    <link rek="stylesheet" href="/static/css/all.min.css">
 </head>
 <body>
 <nav class="navbar navbar-light bg-light">
@@ -33,11 +35,524 @@
                     Binary
                 </a>
             </li>
+            {% if complete == 2 %}
+            <ul class="v-navbar-list">
+                <li class="v-navbar-subitem active">
+                    <a class="v-navbar-subitem-content" href="/analysis/binary/{{md5}}">
+                        Information
+                    </a>
+                </li>
+                <li class="v-navbar-subitem">
+                    <a class="v-navbar-subitem-content" href="/analysis/binary/{{md5}}/classes">
+                        Classes
+                    </a>
+                </li>
+                <li class="v-navbar-subitem">
+                    <a class="v-navbar-subitem-content" href="/analysis/binary/{{md5}}/methods">
+                        Methods
+                    </a>
+                </li>
+                <li class="v-navbar-subitem">
+                    <a class="v-navbar-subitem-content" href="/analysis/binary/{{md5}}">
+                        Dylibs
+                    </a>
+                </li>
+                <li class="v-navbar-subitem">
+                    <a class="v-navbar-subitem-content" href="/analysis/binary/{{md5}}/checkers">
+                        Checkers
+                    </a>
+                </li>
+                <li class="v-navbar-subitem">
+                    <a class="v-navbar-subitem-content" href="/analysis/binary/{{md5}}">
+                        Hex View
+                    </a>
+                </li>
+            </ul>
+            {% endif %}
         </ul>
     </div>
-    <div>
-        {{ mach_info }}
+    {% if mach_info %}
+    {% set mach_object = mach_info.mach_objects[0] %}
+    <div class="col" style="background: white; padding-right: 0; margin-right: 15px;">
+        <div style=" margin: 10px 20px;">
+            <div class="section">
+                <div class="col" style="margin-bottom: 10px;">
+                    <div>
+                        <p class="item-title">Binary Information</p>
+
+                    </div>
+                    <div>
+                        <span style="display: inline-block; width: 25%;">
+                            <span class="item-value-strong">Arch: </span>
+                            <span class="item-value-inline">ARM64</span>
+                        </span>
+                        <span style="display: inline-block; width: 70%;">
+                            <span class="item-value-strong">fPIE: </span>
+                            <span class="badge badge-success" style="margin-left: 10px">Open</span>
+                            <span class="item-value-comment">This flag enables Address Space Layout Randomization (ASLR), a memory protection mechanism for exploit mitigation.</span>
+                        </span>
+                    </div>
+                    <div>
+                        <span style="display: inline-block; width: 25%;">
+                            <span class="item-value-strong">Sub Arch: </span>
+                            <span class="item-value-inline">CPU_SUBTYPE_ARM64_ALL</span>
+                        </span>
+                        <span style="display: inline-block; width: 70%;">
+                            <span class="item-value-strong">fStackP: </span>
+                            <span class="badge badge-success" style="margin-left: 10px">Open</span>
+                            <span class="item-value-comment">This flag is having protection against Stack Overflows/Stack Smashing Attacks.</span>
+                        </span>
+                    </div>
+                    <div>
+                        <span style="display: inline-block; width: 25%;">
+                            <span class="item-value-strong">Bit: </span>
+                            <span class="item-value-inline">64-bit</span>
+                        </span>
+                        <span style="display: inline-block; width: 70%;">
+                            <span class="item-value-strong">fARC: </span>
+                            <span class="badge badge-danger" style="margin-left: 10px">Close</span>
+                            <span class="item-value-comment">ARC is a compiler feature that provides automatic memory management of Objective-C objects and cam against memory corruption vulnerabilities.</span>
+                        </span>
+
+                    </div>
+                </div>
+            </div>
+            <div class="section">
+                <div class="col" style="margin-bottom: 20px; margin-top: 10px;">
+                    <div>
+                        <p class="item-title">Load Commands</p>
+                        <span class="item-value-strong">Number of Load Commands: </span>
+                        <span class="item-value-inline">{{ mach_object.ncmds }}</span>
+                        <div class="accordion" id="accordionExample">
+                            {% set dylib_frameworks_path = mach_object.dylib_frameworks_path.copy() %}
+                            {% for key in mach_object._cmds %}
+                            {% set load_commands = mach_object._cmds[key] %}
+                            {% for index, command in load_commands %}
+                            <div class="card load-commands-card">
+                                {% if command.cmd == 1 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        LC_SEGMENT ({{ command.segname }})
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_SEGMENT</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; width: 50%;">
+                                                <span class="item-value-strong">Segment Name: </span>
+                                                <span class="item-value-inline">{{ command.segname }}</span>
+                                                <span class="item-value-comment">The segment name of this load command represent</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Number of Sections: </span>
+                                                <span class="item-value-inline">{{ command.nsects }}</span>
+                                                <span class="item-value-comment">The number of sections in this segment</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; width: 50%;">
+                                                <span class="item-value-strong">VM address: </span>
+                                                <span class="item-value-inline">{{ command.vmaddr }}</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">VM size: </span>
+                                                <span class="item-value-inline">{{ command.vmsize }}</span>
+                                                <!--<span class="item-value-comment">The number of sections in this segment</span>-->
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; width: 50%;">
+                                                <span class="item-value-strong">File offset: </span>
+                                                <span class="item-value-inline">{{ command.fileoff }}</span>
+                                                <span class="item-value-comment">The offset of this load command in current file</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">File size: </span>
+                                                <span class="item-value-inline">{{ command.filesize }}</span>
+                                                <!--<span class="item-value-comment">The number of sections in this segment</span>-->
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; width: 50%;">
+                                                <span class="item-value-strong">Maximum VM Protection: </span>
+                                                <span class="item-value-inline">{{ command.maxprot }}</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Initial VM Protection: </span>
+                                                <span class="item-value-inline">{{ command.initprot }}</span>
+                                                <!--<span class="item-value-comment">The number of sections in this segment</span>-->
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif command.cmd == 2 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        LC_SYMTAB
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_SYMTAB</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Symbol Table Offset: </span>
+                                                <span class="item-value-inline">{{ command.symoff }}</span>
+                                                <span class="item-value-comment">The offset of symbol table in current bytes</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Number of symbols: </span>
+                                                <span class="item-value-inline">{{ command.nsyms }}</span>
+                                                <!--<span class="item-value-comment">T</span>-->
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">String Table Offset: </span>
+                                                <span class="item-value-inline">{{ command.stroff }}</span>
+                                                <span class="item-value-comment">The offset of string table of symbols in current bytes</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">String Table Size: </span>
+                                                <span class="item-value-inline">{{ command.strsize }}</span>
+                                                <!--<span class="item-value-comment">T</span>-->
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif command.cmd == 11 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        LC_DYSYMTAB
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_DYSYMTAB</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif command.cmd == 12 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        {% set dylib_name = dylib_frameworks_path.pop(0) %}
+                                        LC_LOAD_DYLIB ({{ dylib_name.split('/')[-1] }})
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_LOAD_DYLIB</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">String offset: </span>
+                                                <span class="item-value-inline">{{ command.dylib.name }}</span>
+                                                <span class="item-value-comment">The name offset of this dylib</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Time Stamp: </span>
+                                                <span class="item-value-inline">{{ command.dylib.timestamp }}</span>
+                                                <span class="item-value-comment">The timestamp of this dylib</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Current Version: </span>
+                                                <span class="item-value-inline">{{ command.dylib.current_version }}</span>
+                                                <span class="item-value-comment">The version of current dylib</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Compatibility Version: </span>
+                                                <span class="item-value-inline">{{ command.dylib.compatibility_version }}</span>
+                                                <!--<span class="item-value-comment">The timestamp of this dylib</span>-->
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Name: </span>
+                                                <span class="item-value-inline">{{ dylib_name }}</span>
+                                                <span class="item-value-comment">The path of current dylib</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif command.cmd == 2147483672 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        LC_LOAD_WEAK_DYLIB
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_LOAD_WEAK_DYLIB</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif command.cmd == 25 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        LC_SEGMENT_64 ({{ command.segname }})
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_SEGMENT_64</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; width: 50%;">
+                                                <span class="item-value-strong">Segment Name: </span>
+                                                <span class="item-value-inline">{{ command.segname }}</span>
+                                                <span class="item-value-comment">The segment name of this load command represent</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Number of Sections: </span>
+                                                <span class="item-value-inline">{{ command.nsects }}</span>
+                                                <span class="item-value-comment">The number of sections in this segment</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; width: 50%;">
+                                                <span class="item-value-strong">VM address: </span>
+                                                <span class="item-value-inline">{{ command.vmaddr }}</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">VM size: </span>
+                                                <span class="item-value-inline">{{ command.vmsize }}</span>
+                                                <!--<span class="item-value-comment">The number of sections in this segment</span>-->
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; width: 50%;">
+                                                <span class="item-value-strong">File offset: </span>
+                                                <span class="item-value-inline">{{ command.fileoff }}</span>
+                                                <span class="item-value-comment">The offset of this load command in current file</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">File size: </span>
+                                                <span class="item-value-inline">{{ command.filesize }}</span>
+                                                <!--<span class="item-value-comment">The number of sections in this segment</span>-->
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; width: 50%;">
+                                                <span class="item-value-strong">Maximum VM Protection: </span>
+                                                <span class="item-value-inline">{{ command.maxprot }}</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Initial VM Protection: </span>
+                                                <span class="item-value-inline">{{ command.initprot }}</span>
+                                                <!--<span class="item-value-comment">The number of sections in this segment</span>-->
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif command.cmd == 34 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        LC_DYLD_INFO
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_DYLD_INFO</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif command.cmd == 24 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        LC_LOAD_WEAK_DYLIB
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_LOAD_WEAK_DYLIB</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% elif command.cmd == 2147483676 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        LC_RPATH
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_RPATH</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Str Offset: </span>
+                                                <span class="item-value-inline">12</span>
+                                                <!--<span class="item-value-comment">The type of this load command</span>-->
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Path: </span>
+                                                <span class="item-value-inline">{{ mach_object.symbols[command.path] }}</span>
+                                                <span class="item-value-comment">The path of dylib frameworks</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% else %}
+                                {% if command.cmd in load_commands_name %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        {{ load_commands_name[command.cmd] }}
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">{{ load_commands_name[command.cmd] }}</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endif %}
+                                {% endif %}
+                            </div>
+                            {% endfor %}
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
+    {% else %}
     <div class="analysis-loading">
         <div class="spinner-border" style="width: 3rem; height: 3rem;" role="status">
             <span class="sr-only">Loading...</span>
@@ -49,6 +564,7 @@
             <span>Please wait</span>
         </div>
     </div>
+    {% endif %}
 </div>
 ̵
 <script>
@@ -62,12 +578,14 @@
                 msg_data = result['data'];
                 msg = msg_data['msg'];
                 processing = msg_data['processing'];
-                if (!processing) {
-                    clearInterval(process_request);
-                    // location.reload();
+                if (msg.length > 0) {
+                    if (!processing && msg.length > 0) {
+                        clearInterval(process_request);
+                        location.reload();
+                    }
+                    $('div#binary-analysis-status span').text(msg);
+                    console.log(msg);
                 }
-                $('div#binary-analysis-status span').text(msg);
-                console.log(msg);
             });
         }, 1000);
     }

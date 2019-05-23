@@ -1,0 +1,27 @@
+.load-commands-card {
+    border-radius: 0;
+}
+
+.load-commands-card-header {
+    /*height: 35px;*/
+    padding: 0;
+    margin: 0;
+}
+
+.load-commands-card-header button {
+    font-size: 11px;
+    color: black;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.load-commands-card-header button:hover {
+    font-size: 11px;
+    color: black;
+    font-weight: bold;
+    text-decoration: none;
+}
+
+.load-commands-card-header button:visited {
+    text-decoration: none;
+}

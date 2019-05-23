@@ -1,6 +1,7 @@
 import ctypes
 import hashlib
 import sys
+import time
 
 # Inner Function
 def parse_int(_bytes, little_end=True):
@@ -79,6 +80,12 @@ def sorted_list_for_hex_string(l):
     # print((after - before).microseconds)
     return l
 
+
 def md5_for_file(file_path):
     hash_code = hashlib.md5(open(file_path, 'rb').read()).hexdigest()
     return hash_code
+
+
+def time_to_str(t):
+    time_struct = time.localtime(t)
+    return time.strftime('%Y/%m/%d %H:%M:%S', time_struct)

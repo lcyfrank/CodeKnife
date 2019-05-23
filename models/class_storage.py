@@ -178,13 +178,15 @@ class IvarData:
 
 class PropertyData:
 
-    def __init__(self, name=None, _type=None, pd_dict=None):
+    def __init__(self, name=None, _type=None, attributes=[], pd_dict=None):
         if pd_dict is None:
             self.name = name
             self._type = _type
+            self.attributes = attributes
         else:
             self.name = pd_dict['name']
             self._type = pd_dict['_type']
+            self.attributes = pd_dict['attributes']
 
     def convert_to_dict(self):
         return self.__dict__.copy()

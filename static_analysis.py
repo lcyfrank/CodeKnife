@@ -43,13 +43,38 @@ def _disasm_specified_function(arch, mode, machine_code, address, base_address, 
         temp_code = code[last_addr - address:]
         for insn in model.disasm(temp_code, last_addr):
 
-            last_addr = insn.address
-            if hex(insn.address) in slice_address:
+            # !!!!!!
+            # !!!!!! 这里的 insn 换成自己定义的类
+            # !!!!!!
+            cs_insn = CSInstruction()
+            cs_insn.address = insn.address
+            cs_insn.id = insn.id
+            cs_insn.mnemonic = insn.mnemonic
+            cs_insn.bytes = insn.bytes
+            cs_insn.op_str = insn.op_str
+
+            for operand in insn.operands:
+                cs_operand = CSOperand()
+                cs_operand.type = operand.type
+                if operand.type == ARM64_OP_REG:
+                    cs_operand.reg = insn.reg_name(operand.reg)
+                elif operand.type == ARM64_OP_MEM:
+                    mem = CSMemory()
+                    mem.base = insn.reg_name(operand.mem.base)
+                    mem.index = operand.mem.index
+                    mem.disp = operand.mem.disp
+                    cs_operand.mem = mem
+                elif operand.type == ARM64_OP_IMM:
+                    cs_operand.imm = operand.imm
+                cs_insn.operands.append(cs_operand)
+
+            last_addr = cs_insn.address
+            if hex(cs_insn.address) in slice_address:
                 if len(current_function) != 0:
                     return current_function
-                current_function.append(insn)
+                current_function.append(cs_insn)
             else:
-                current_function.append(insn)
+                current_function.append(cs_insn)
     return current_function
 
 
@@ -92,7 +117,8 @@ def _slice_by_function_for_arm64(arch, mode, machine_code, base_addr, slice_addr
                     mem.index = operand.mem.index
                     mem.disp = operand.mem.disp
                     cs_operand.mem = mem
-
+                elif operand.type == ARM64_OP_IMM:
+                    cs_operand.imm = operand.imm
                 cs_insn.operands.append(cs_operand)
 
             last_addr = cs_insn.address
@@ -303,6 +329,9 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
             # print("Some error happens during analysis in get value in register 1 (Method)")
             # print(str(e))
             return False
+
+        if class_name == 'ABKModelManager':
+            print(caller_name, meth_name)
         # 处理 Objective-C 中的方法调用相关内容
         # Handle Notification
         if caller_name == 'NSNotificationCenter' and meth_name == 'addObserver:selector:name:object:':
@@ -554,12 +583,63 @@ def handle_super_method(mach_info, class_data, inter, instruction):
 
 
 def _analyse_basic_block(block_instruction, identify, mach_info, class_data, class_name, method_name, inter: Interpreter, add_range, method_hub=None, recursive_stack=set([])):
+    print('analyse basic block')
     r_stack = recursive_stack.copy()
 
     basic_block = MethodBasicBlockInstructions(identify)
     for i in range(len(block_instruction)):
         cs_insn = block_instruction[i]
-        inter.interpret_code(block_instruction, begin=i, end=i+1)  # 执行当前语句
+        results = inter.interpret_code(block_instruction, begin=i, end=i+1)  # 执行当前语句
+        result = None
+        if len(results) > 0:
+            result = results[0]
+        comment = None
+        if result is not None:
+            if result == SELF_POINTER:  # 自己的方法
+                comment = class_name
+            elif result <= RETURN_VALUE:  # 某个方法的返回值
+                pass
+            elif result < SELF_POINTER:  # 调用的是某个参数的方法
+                comment = 'PARAMETERS_' + str(SELF_POINTER - result - 1)
+            elif result < 0:  # 调用的是父类的方法
+                if class_data is None:
+                    comment = class_name
+                else:
+                    comment = class_data.super
+            else:
+                obj_name_key = hex(result)
+                # 其他类
+                if obj_name_key in mach_info.statics_class:  # 静态变量
+                    print('静态变量?')
+                    obj_name = mach_info.statics_class[obj_name_key]
+                    comment = obj_name
+                elif obj_name_key in mach_info.symbols:  # 直接可以从符号表中获得信息
+                    print('符号表')
+                    obj_name = mach_info.symbols[obj_name_key]
+                    # obj_name_index = obj_name.find('$')
+                    # obj_name = obj_name[obj_name_index + 2:]
+                    comment = obj_name
+                elif obj_name_key in mach_info.class_datas:  # 调用的是某个类
+                    print('某个类')
+                    obj_data = mach_info.class_datas[obj_name_key]
+                    comment = obj_data.name
+                elif class_data is not None and 1 <= result // 0x8 <= len(class_data.ivars):  # 类中的变量
+                    print('类中变量')
+                    ivar_index = result // 0x8 - 1
+                    ivar = class_data.ivars[ivar_index]
+                    comment = ivar.name
+
+                elif obj_name_key in mach_info.cfstrings:  # 某个字符串的方法
+                    print('某个字符串')
+                    # comment = mach_info.cfstrings[obj_name_key]
+                    pass
+                elif obj_name_key in mach_info.statics:  # 静态变量
+                    print('静态变量')
+                    comment = mach_info.statics[obj_name_key]
+
+            if comment is not None:
+                cs_insn.comment = comment
+
         # if cs_insn.address == 0x10002f998:
         #     ctx = inter.context
         #     print(ctx.data_flow)
@@ -580,9 +660,9 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                 _function = mach_info.functions[hex(operand.imm)]  # 取得调用的函数
             except Exception as e:
                 continue
-
             # 解析出函数名
             function_name = mach_info.symbols[hex(_function)]
+            cs_insn.comment = function_name
 
             if function_name == "_objc_msgSendSuper2":  # 调用父类方法
                 handle_super_method(mach_info, class_data, inter, instruction)
@@ -812,6 +892,9 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
         return_type = get_obj_name(mach_info, rt, class_name, class_data)
         return_types_str.append(return_type)
     method_instructions.return_type = return_types_str
+    if (class_name, method_name) in mach_info.methods_type:
+        if 'void' not in mach_info.methods_type[(class_name, method_name)].return_type and return_type != 'id':
+            mach_info.methods_type[(class_name, method_name)].return_type = return_type
     method_hub.insert_method_insn(method_instructions)
 
     for data_var in ctx.data_flow:
@@ -849,10 +932,10 @@ def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue=None):
     # Parse the mach-o information
     msg_queue.put('Open binary successfully')
     msg_queue.put('Start analyzing the information of Mach-O file')
-    mach_container = load_mach_info_of_md5(binary_md5)
+    mach_container = load_mach_container_of_md5(binary_md5)
     if mach_container is None:
         mach_container = MachContainer(mach_o_file.read(), file_provider=macho_file_provider, mode=mode)
-        store_md5_with_mach_info(binary_md5, mach_container)
+        store_md5_with_mach_container(binary_md5, mach_container)
     else:
         for mach_info in mach_container.mach_objects:
             mach_info.file_provider = macho_file_provider
@@ -878,24 +961,45 @@ def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue=None):
         sorted_slice_addresses = sorted_list_for_hex_string(slice_addresses)
 
         # Start disassemble all methods
-        method_hub = MachoMethodHub()  # 对于每一个架构都有一个
-        methods_hubs.append(method_hub)
         msg_queue.put('Start disassemble all methods')
+        print('Start disassemble all methods')
         method_instructions = load_cs_instructions_of_md5(binary_md5, mach_info.is_64_bit)
+        # method_hub = MachoMethodHub()  # 对于每一个架构都有一个
         if method_instructions is None:
+            print('Method Instructions is None')
+            method_hub = MachoMethodHub()  # 对于每一个架构都有一个
             method_instructions = _slice_by_function_for_arm64(arch, mode, mach_info.text, mach_info.text_addr,
                                                                sorted_slice_addresses, method_hub=method_hub)
+            msg_queue.put('Disassemble all methods complete')
+            msg_queue.put('Start analyzing all methods')
+            for method_instruction in method_instructions:
+                _analyse_method(method_instruction, mach_info, method_hub=method_hub)
+            # update_method_hub_of_md5(binary_md5, method_hub, len(methods_hubs) - 1, method_insn_update=True)
+            store_md5_with_method_hub(binary_md5, method_hub, len(methods_hubs))
             store_md5_with_cs_instructions(binary_md5, method_instructions, mach_info.is_64_bit)
-        # Disassemble complete
-        msg_queue.put('Disassemble all methods complete')
-        # Start analyse method
-        msg_queue.put('Start analyzing all methods')
-        for method_instruction in method_instructions:
-            _analyse_method(method_instruction, mach_info, method_hub=method_hub)
-        msg_queue.put('Analyze all methods complete')
+            update_mach_container_of_md5(binary_md5, mach_container)
+            msg_queue.put('Analyze all methods complete')
 
-        # queue.put(method_hub)
-
+            # print('Disassemble all methods complete')
+            # print('Store finish')
+        else:
+            print('Load Method instructions form mongoDB')
+            method_hub = load_method_hub_of_md5(binary_md5, len(methods_hubs))
+            msg_queue.put('Analyze all methods complete')
+        methods_hubs.append(method_hub)
+        # if len(method_hub.method_insns) == 0:
+            # Disassemble complete
+            # Start analyse method
+            # print(method_instructions)
+            # msg_queue.put('Start analyzing all methods')
+            # for method_instruction in method_instructions:
+            #     _analyse_method(method_instruction, mach_info, method_hub=method_hub)
+            # update_method_hub_of_md5(binary_md5, method_hub, len(methods_hubs) - 1, method_insn_update=True)
+            # update_mach_container_of_md5(binary_md5, mach_container)
+            # msg_queue.put('Analyze all methods complete')
+        # else:
+        #     msg_queue.put('Start analyzing all methods')
+        #     msg_queue.put('Analyze all methods complete')
 
 # 0 means 64-bit
 # 1 means 32-bit
