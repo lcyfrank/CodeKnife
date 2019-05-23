@@ -12,6 +12,7 @@ from models.mach_object import *
 from models.macho_method_hub import *
 from models.mongo_storage import *
 from cfg_generator import *
+from urllib import parse
 
 ALLOWED_EXTENSIONS = {'app', 'ipa'}
 app = Flask(__name__)
@@ -257,13 +258,14 @@ def binary_analysis_checkers(file_md5):
 @app.route('/analysis/binary/<file_md5>/checkers/edit')
 def binary_analysis_checkers_edit(file_md5):
     checker_name = request.args.get('ch')
+    if checker_name is None:
+        return render_template('checkers_edit.html', md5=file_md5)
     current_dir = os.getcwd()
     checkers_dir = os.path.join(os.path.dirname(current_dir), 'checker')
     checker_path = os.path.join(checkers_dir, checker_name + '.py')
-
-    content = None
     with open(checker_path, 'r') as file:
         content = file.read()
+
     return render_template('checkers_edit.html', md5=file_md5, checker_file=checker_name + '.py', checker_code=content)
 
 
@@ -273,6 +275,65 @@ def binary_analysis_execute_checker(file_md5):
     code = code_bytes.decode('utf-8')
     # Execute this code
     return 'OK'
+
+
+@app.route('/analysis/binary/save', methods=['POST'])
+def binary_analysis_save_checker():
+    save_data: bytes = request.stream.read()
+    save_data_str = save_data.decode('utf-8')
+    save_data_json = parse.parse_qs(save_data_str)
+
+    current_dir = os.getcwd()
+    checkers_dir = os.path.join(os.path.dirname(current_dir), 'checker')
+
+    new_file_name = save_data_json['name'][0]
+    new_file_path = os.path.join(checkers_dir, new_file_name + '.py')
+
+    if save_data_json['action'][0] == 'new':
+        # New
+        duplicate_index = 1
+        temp_new_file_name = new_file_name
+        while os.path.exists(new_file_path):
+            temp_new_file_name = new_file_name + '(' + str(duplicate_index) + ')'
+            new_file_path = os.path.join(checkers_dir, temp_new_file_name + '.py')
+            duplicate_index += 1
+
+        new_file = open(new_file_path, 'w')
+        if 'content' in save_data_json:
+            new_file.write(save_data_json['content'][0])
+        new_file.close()
+        return temp_new_file_name
+    else:
+        old_file_name = save_data_json['old'][0]
+        old_file_path = os.path.join(checkers_dir, old_file_name)
+        os.remove(old_file_path)
+
+        duplicate_index = 1
+        temp_new_file_name = new_file_name
+        while os.path.exists(new_file_path):
+            temp_new_file_name = new_file_name + '(' + str(duplicate_index) + ')'
+            new_file_path = os.path.join(checkers_dir, temp_new_file_name + '.py')
+            duplicate_index += 1
+
+        new_file = open(new_file_path, 'w')
+        if 'content' in save_data_json:
+            new_file.write(save_data_json['content'][0])
+        new_file.close()
+        return temp_new_file_name
+
+
+@app.route('/analysis/binary/delete', methods=['POST'])
+def binary_analysis_delete_checker():
+    file_data: bytes = request.stream.read()
+    file_name = file_data.decode('utf-8')
+
+    current_dir = os.getcwd()
+    checkers_dir = os.path.join(os.path.dirname(current_dir), 'checker')
+    file_path = os.path.join(checkers_dir, file_name + '.py')
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        return 'OK'
+    return 'Err'
 
 
 def extract_from_zip(path):

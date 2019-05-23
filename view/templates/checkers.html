@@ -73,42 +73,44 @@
     </div>
 
     <div class="col" style="background: white; padding-left: 0; height: 100%; padding-right: 0; margin-right: 15px;">
-        <div class="row" style="height: 100%; margin-left: 0; margin-right: 0; margin-bottom: 50px;">
+        <div class="checkers-toolbar">
+            <button type="button" class="btn btn-outline-secondary new-button">New</button>
             <div class="btn-group-toggle checkers-view-switch" data-toggle="buttons">
                 <label class="btn btn-light active">
-                    <input type="checkbox" checked autocomplete="off"><img width="20px" height="20px" src="/static/imgs/list.png">
+                    <input type="checkbox" checked autocomplete="off"><img width="20px" height="20px"
+                                                                           src="/static/imgs/list.png">
                 </label>
             </div>
-            <table class="table checkers-list">
-                <thead class="thead-light">
-                <tr>
-                    <th scope="col">#</th>
-                    <th scope="col">File name</th>
-                    <th scope="col">Size</th>
-                    <th scope="col">Create time</th>
-                    <th scope="col">Modify time</th>
-                </tr>
-                </thead>
-                <tbody>
-                {% for checker in checkers %}
-                <tr>
-                    <th scope="row">{{ loop.index }}</th>
-                    <td><a href="./checkers/edit?ch={{ checker['name'][:-3] }}">{{ checker['name'] }}</a></td>
-                    <td> {{ checker['size'] }} KB</td>
-                    <td> {{ checker['create'] }}</td>
-                    <td> {{ checker['modify'] }}</td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            <div class="checkers-gallery" style="display: none;">
-                {% for checker in checkers %}
-                <div class="checkers-item">
-                    <img width="50px" height="50px" src="/static/imgs/file.png">
-                    <p> <a href="./checkers/edit?ch={{ checker['name'][:-3] }}">{{ checker['name'][:-3] }}</a> </p>
-                </div>
-                {% endfor %}
+        </div>
+        <table class="table checkers-list">
+            <thead class="thead-light">
+            <tr>
+                <th scope="col">#</th>
+                <th scope="col">File name</th>
+                <th scope="col">Size</th>
+                <th scope="col">Create time</th>
+                <th scope="col">Modify time</th>
+            </tr>
+            </thead>
+            <tbody>
+            {% for checker in checkers %}
+            <tr>
+                <th scope="row">{{ loop.index }}</th>
+                <td><a href="./checkers/edit?ch={{ checker['name'][:-3] }}">{{ checker['name'] }}</a></td>
+                <td> {{ checker['size'] }} KB</td>
+                <td> {{ checker['create'] }}</td>
+                <td> {{ checker['modify'] }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        <div class="checkers-gallery" style="display: none;">
+            {% for checker in checkers %}
+            <div class="checkers-item">
+                <img width="50px" height="50px" src="/static/imgs/file.png">
+                <p><a href="./checkers/edit?ch={{ checker['name'][:-3] }}">{{ checker['name'][:-3] }}</a></p>
             </div>
+            {% endfor %}
         </div>
     </div>
 </div>

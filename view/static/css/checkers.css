@@ -1,5 +1,4 @@
 .checkers-list {
-    margin-top: 45px;
     font-size: 13px;
 }
 
@@ -24,13 +23,31 @@
 }
 
 .checkers-item {
-    margin-top: 45px;
     display: inline-block;
     margin-left: 30px;
     margin-right: 30px;
     text-align: center;
+    width: 120px;
 }
 
 .checkers-item p {
+    font-size: 13px;
+}
+
+.checkers-item p a {
+    color: #000;
+    font-weight: 500;
+}
+
+.checkers-toolbar {
+    height: 45px;
+    width: 100%;
+}
+
+.new-button {
+    height: 25px;
+    padding: 0 5px;
+    margin-left: 10px;
+    margin-top: 10px;
     font-size: 13px;
 }

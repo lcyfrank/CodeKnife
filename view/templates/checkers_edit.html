@@ -17,6 +17,7 @@
     <script src="/static/js/checkers_edit.js"></script>
     <script>
         let file_md5 = '{{ md5 }}'
+        let checker_file = '{{ checker_file }}'
     </script>
 </head>
 <body>
@@ -81,10 +82,25 @@
 
     <div class="col" style="background: white; padding-left: 0; height: 100%; padding-right: 0; margin-right: 15px;">
         <div class="editor-toolbar">
-            <span class="editor-file-name"> {{checker_file}} </span>
-            <img width="30px" height="30px" src="/static/imgs/run.png" alt="Click to run the code" title="Click to run the code" onclick="execute_code()">
+            {% if checker_file %}
+            <input class="editor-file-name" type="text" value="{{checker_file[:-3]}}">
+            {% else %}
+            <input class="editor-file-name" type="text" value="" placeholder="input name to save">
+            {% endif %}
+            <img width="30px" height="30px" src="/static/imgs/run.png" alt="Click to run the code"
+                 title="Click to run the code" onclick="execute_code()">
+            <button type="button" class="btn btn-outline-primary editor-save-button" disabled>Save</button>
+            {% if checker_file %}
+            <button type="button" class="btn btn-outline-danger editor-delete-button">Delete</button>
+            {% else %}
+            <button type="button" class="btn btn-outline-danger editor-delete-button" disabled>Delete</button>
+            {% endif %}
         </div>
+        {% if checker_code %}
         <textarea class="code-editor" style="display: none;">{{ checker_code }}</textarea>
+        {% else %}
+        <textarea class="code-editor" style="display: none;"></textarea>
+        {% endif %}
         <div class="checker-result">
 
         </div>

@@ -27,12 +27,31 @@
     border-radius: 5px;
 }
 
+.editor-save-button {
+    height: 25px;
+    padding: 0 5px;
+    float: right;
+    margin-right: 10px;
+    margin-top: 10px;
+    font-size: 13px;
+}
+
+.editor-delete-button {
+    height: 25px;
+    padding: 0 5px;
+    float: right;
+    margin-right: 10px;
+    margin-top: 10px;
+    font-size: 13px;
+}
+
 .editor-file-name {
     display: inline-block;
     font-size: 17px;
     font-weight: 500;
     margin-left: 10px;
     margin-top: 10px;
+    border: none;
 }
 
 .checker-result {
