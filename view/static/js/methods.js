@@ -1,4 +1,5 @@
 function draw_graph() {
+    console.log('sdlkfjdsklfjkldsjfklsd');
     const GO = go.GraphObject.make;
     const graph = GO(go.Diagram, 'methods-cfgs');
     graph.allowDelete = false;
@@ -265,15 +266,25 @@ function draw_graph() {
 }
 
 $(function () {
-    draw_graph();
-    $('.methods-detail-graph').hide();
-    $('input[type=radio][name=options]').change(function () {
-        if (this.id == 'methods-text') {
-            $('.methods-detail-text').show();
-            $('.methods-detail-graph').hide();
+    if (cfg_model != 'null') {
+        draw_graph();
+        $('.methods-detail-graph').hide();
+        $('input[type=radio][name=options]').change(function () {
+            if (this.id == 'methods-text') {
+                $('.methods-detail-text').show();
+                $('.methods-detail-graph').hide();
+            } else {
+                $('.methods-detail-text').hide();
+                $('.methods-detail-graph').show();
+            }
+        });
+    }
+    $('.methods-class-selector').change(function () {
+        var select = $('.methods-class-selector')[0].value;
+        if (select.length > 0) {
+            location.href = './methods?sel=' + select;
         } else {
-            $('.methods-detail-text').hide();
-            $('.methods-detail-graph').show();
+            location.href = './methods';
         }
-    })
+    });
 });

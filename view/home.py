@@ -169,15 +169,51 @@ def binary_analysis_classes(file_md5):
         if file_md5 not in _g_process_msg_queues:  # 说明没有正在分析
             if file_md5 in _g_md5_object:  # 分析完成
                 mach_info, method_hub = _g_md5_object[file_md5]
+                mach_object = mach_info.mach_objects[0]
                 class_name = request.args.get('class')
                 cat_data = request.args.get('cat')
+                search_key: str = request.args.get('search')
+                # if search_key is None:
+                #     search_key = ''
                 cat_name = None
                 cat_class = None
                 if cat_data is not None:
                     cat_name = cat_data.split(' ')[0]
                     cat_class = cat_data.split(' ')[1]
-                return render_template('classes.html', md5=file_md5, mach_info=mach_info, class_name=class_name,
-                                       cat_name=cat_name, cat_class=cat_class, method_hub=method_hub)
+
+                class_name_list = []
+                for data_address in mach_object.class_datas:
+                    class_data = mach_object.class_datas[data_address]
+                    if search_key is None or search_key.lower() in class_data.name.lower():
+                        class_name_list.append(class_data.name)
+
+                cat_name_list = []
+                for data_address in mach_object.cat_datas:
+                    cat_data = mach_object.cat_datas[data_address]
+                    if search_key is None or search_key.lower() in cat_data.name.lower() or search_key.lower() in cat_data._class.lower():
+                        cat_name_list.append((cat_data.name, cat_data._class))
+
+                methods_type = None
+                if class_name is not None:
+                    data_address = mach_object.class_name_address[class_name]
+                    data_address_key = hex(data_address)
+                    class_data = mach_object.class_datas[data_address_key]
+                    methods_type = mach_object.methods_type
+                else:
+                    class_data = None
+
+                if cat_name is not None:
+                    data_address = mach_object.cat_datas_address[(cat_class, cat_name)]
+                    data_address_key = hex(data_address)
+                    cat_data = mach_object.cat_datas[data_address_key]
+                    methods_type = mach_object.methods_type
+                else:
+                    cat_data = None
+
+                return render_template('classes.html', md5=file_md5, key=search_key,
+                                       class_name_list=class_name_list, cat_name_list=cat_name_list,
+                                       class_data=class_data, cat_data=cat_data,
+                                       methods_type=methods_type)
     return '''
     <html>
     <head><title>Analysis</title></head>
@@ -196,21 +232,52 @@ def binary_analysis_methods(file_md5):
         if file_md5 not in _g_process_msg_queues:
             if file_md5 in _g_md5_object:
                 mach_info, method_hub = _g_md5_object[file_md5]
+
+                select = request.args.get('sel')
                 address = request.args.get('address')
-                cfg = None
                 if address:
                     address = int(address)
+
+                method_title = None
+                method_name_list = []
+                class_name_list = []
+                for class_name in method_hub.method_insns:
+                    class_name_list.append(class_name)
+                    if select is not None and class_name != select:
+                        continue
+                    class_methods = method_hub.method_insns[class_name]
+                    for method_insn in class_methods:
+                        method_insn_address = method_insn.entry_block.instructions[0].address
+                        method_insn_address_key = hex(method_insn_address)
+                        if method_insn_address_key in method_hub.cs_insns:
+                            if method_insn.class_name[0] == '$':
+                                if address and method_insn_address == address:
+                                    method_title = method_insn.method_name
+                                method_name_list.append((method_insn_address, method_insn.method_name))
+                            else:
+                                if address and method_insn_address == address:
+                                    method_title = '[' + class_name + ' ' + method_insn.method_name + ']'
+                                method_name_list.append((method_insn_address, '[' + class_name + ' ' + method_insn.method_name + ']'))
+
+                cfg = None
+                if address:
                     address_key = hex(address)
+                    method_insn = method_hub.cs_insns[address_key]
                     if address_key in mach_info.mach_objects[0].methods:
                         class_name, method_name = mach_info.mach_objects[0].methods[address_key]
 
                         def cfg_provider(class_name, imp_name):
                             method_instruction = method_hub.get_method_insn(class_name, imp_name)
                             return method_instruction
+
                         method_instruction = method_hub.get_method_insn(class_name, method_name)
                         cfg = generate_cfg(method_instruction, cfg_provider, False).convert_to_dict()
-                return render_template('methods.html', md5=file_md5, mach_info=mach_info, method_hub=method_hub,
-                                       address=address, cfg_model=cfg)
+                else:
+                    method_insn = None
+
+                return render_template('methods.html', md5=file_md5, select=select,
+                                       class_name_list=class_name_list, method_name_list=method_name_list,
+                                       method_insns=method_insn, cfg_model=cfg, method_title=method_title)
     return '''
     <html>
     <head><title>Analysis</title></head>

@@ -103,3 +103,27 @@
     margin-left: 30px;
     color: gray;
 }
+
+.methods-class-selector {
+    height: calc(1.5em + .75rem + 2px);
+    padding: .375rem 1.75rem .375rem .75rem;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #495057;
+    background-color: #fff;
+    border: 1px solid #ced4da;
+    border-radius: .25rem;
+    margin: 10px;
+    width: calc(100% - 20px);
+}
+
+.methods-title {
+    display: inline-block;
+    width: calc(100% - 120px);
+    text-align: center;
+    margin-left: auto;
+    margin-right: auto;
+    font-family: 'SF UI Text Medium', 'SF UI Text Light', 'Helvetica Neue', 'HelveticaNeue', Helvetica, Arial, Verdana, sans-serif;
+    font-weight: 500;
+}

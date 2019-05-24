@@ -1,20 +1,22 @@
 $(function () {
 
     var codeArea = $('.code-editor')[0];
+    var name_input = $('.editor-file-name')[0];
 
     var editor = CodeMirror.fromTextArea(codeArea, {
         lineNumbers: true,
         mode: 'python',
         theme: 'material'
     });
+
     editor.on('change', () => {
         $('.editor-delete-button')[0].disabled = true;
-        if ($('.editor-save-button')[0].disabled === true)
+
+        if ($('.editor-save-button')[0].disabled === true && name_input.length > 0)
             $('.editor-save-button')[0].disabled = false;
         codeArea.innerHTML = editor.getValue();
     });
 
-    var name_input = $('.editor-file-name')[0];
     name_input.addEventListener('input', () => {
         $('.editor-delete-button')[0].disabled = true;
         var name_length = name_input['value'].length;

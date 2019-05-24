@@ -75,45 +75,43 @@
 
         </ul>
     </div>
-    {% set mach_object = mach_info.mach_objects[0] %}
     <div class="col" style="background: white; padding-left: 0; height: 100%; padding-right: 0; margin-right: 15px;">
         <div class="row" style="height: 100%; margin-left: 0; margin-right: 0; margin-bottom: 50px;">
             <div class="methods-panel">
-            <span class="methods-panel-title">
-                Methods
-            </span>
-                {% for class_name in method_hub.method_insns %}
-                {% set class_methods = method_hub.method_insns[class_name] %}
-                {% for method_insn in class_methods %}
-                {% set method_insn_address = method_insn.entry_block.instructions[0].address %}
-                {% set method_insn_address_key = '0x%x'|format(method_insn_address) %}
-                {% if method_insn_address_key in method_hub.cs_insns %}
-                {% if method_insn.class_name[0] == '$' %}
-                {% if address and address == method_insn.entry_block.instructions[0].address %}
-                <a class="methods-panel-item active"
-                   href="./methods?address={{ method_insn.entry_block.instructions[0].address }}">{{
-                    method_insn.method_name }}</a>
+                <span class="methods-panel-title">
+                    Methods
+                </span>
+                <select class="methods-class-selector" id="inputGroupSelect02">
+                    {% if select %}
+                    <option value="">All</option>
+                    {% for class_name in class_name_list %}
+                    {% if select == class_name %}
+                    <option value="{{ class_name }}" selected>{{ class_name }}</option>
+                    {% else %}
+                    <option value="{{ class_name }}">{{ class_name }}</option>
+                    {% endif %}
+                    {% endfor %}
+                    {% else %}
+                    <option value="" selected>All</option>
+                    {% for class_name in class_name_list %}
+                    <option value="{{ class_name }}">{{ class_name }}</option>
+                    {% endfor %}
+                    {% endif %}
+                </select>
+                {% if select %}
+                {% set url = './methods?sel=' + select + '&' %}
                 {% else %}
-                <a class="methods-panel-item"
-                   href="./methods?address={{ method_insn.entry_block.instructions[0].address }}">{{
-                    method_insn.method_name }}</a>
+                {% set url = './methods?' %}
                 {% endif %}
+                {% for address, method_name in method_name_list %}
+                {% if method_insns and method_insns[0].address == address %}
+                <a class="methods-panel-item active" href="{{ url }}address={{ address }}">{{ method_name }}</a>
                 {% else %}
-                {% if address and address == method_insn.entry_block.instructions[0].address %}
-                <a class="methods-panel-item active"
-                   href="./methods?address={{ method_insn.entry_block.instructions[0].address }}"> [{{
-                    method_insn.class_name }} {{ method_insn.method_name }}]</a>
-                {% else %}
-                <a class="methods-panel-item"
-                   href="./methods?address={{ method_insn.entry_block.instructions[0].address }}"> [{{
-                    method_insn.class_name }} {{ method_insn.method_name }}]</a>
+                <a class="methods-panel-item" href="{{ url }}address={{ address }}">{{ method_name }}</a>
                 {% endif %}
-                {% endif %}
-                {% endif %}
-                {% endfor %}
                 {% endfor %}
             </div>
-            {% if not address %}
+            {% if not method_insns %}
             <div style="margin: auto;">
                 <span style="color: gray; font-size: 20px;">No methods selected.</span>
             </div>
@@ -128,11 +126,12 @@
                             <input type="radio" name="options" id="methods-graph" autocomplete="off"> Graph
                         </label>
                     </div>
+                    <span class="methods-title">
+                        {{ method_title }}
+                    </span>
                 </div>
                 <div class="methods-detail">
                     <div class="methods-detail-text">
-                        {% set cs_insn_key = '0x%x'|format(address) %}
-                        {% set method_insns = method_hub.cs_insns[cs_insn_key] %}
                         {% for cs_insn in method_insns %}
                         <p class="methods-text"><span
                                 class="methods-text-address">{{ '0x%x'|format(cs_insn.address) }}</span>

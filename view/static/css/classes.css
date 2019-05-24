@@ -71,3 +71,19 @@
 .classes-code-normal .classes-code-inner {
     color: #00a4e0;
 }
+
+.search-input {
+    display: block;
+    width: calc(100% - 20px);
+    height: calc(1.5em + .75rem + 2px);
+    padding: .375rem .75rem;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #495057;
+    background-color: #fff;
+    border: 1px solid #ced4da;
+    border-radius: .25rem;
+    margin: 0 10px;
+    margin-top: 10px;
+}
