@@ -7,11 +7,11 @@ from models.inner_instruction import *
 from cfg_generator import *
 from utils import sorted_list_for_hex_string, md5_for_file
 from tqdm import tqdm
-from checker.paste_checker import *
-from checker.storage_checker import *
-from checker.keychain_checker import *
-from checker.background_checker import *
-from checker.hotfix_checker import *
+from old_checker.paste_checker import *
+from old_checker.storage_checker import *
+from old_checker.keychain_checker import *
+from old_checker.background_checker import *
+from old_checker.hotfix_checker import *
 import os, shutil
 from models.mongo_storage import *
 from queue import Queue
