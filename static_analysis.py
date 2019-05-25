@@ -26,8 +26,6 @@ FA_ALIGN_KEY = 'align'
 _g_return_types = []
 _g_current_context = ()
 
-methods_hubs = []  # [method_hub]
-
 
 def _disasm_specified_function(arch, mode, machine_code, address, base_address, slice_address):
     slice_address = set(slice_address)  # 使用 set，加快查询速度
@@ -610,31 +608,25 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                 obj_name_key = hex(result)
                 # 其他类
                 if obj_name_key in mach_info.statics_class:  # 静态变量
-                    print('静态变量?')
                     obj_name = mach_info.statics_class[obj_name_key]
                     comment = obj_name
                 elif obj_name_key in mach_info.symbols:  # 直接可以从符号表中获得信息
-                    print('符号表')
                     obj_name = mach_info.symbols[obj_name_key]
                     # obj_name_index = obj_name.find('$')
                     # obj_name = obj_name[obj_name_index + 2:]
                     comment = obj_name
                 elif obj_name_key in mach_info.class_datas:  # 调用的是某个类
-                    print('某个类')
                     obj_data = mach_info.class_datas[obj_name_key]
                     comment = obj_data.name
                 elif class_data is not None and 1 <= result // 0x8 <= len(class_data.ivars):  # 类中的变量
-                    print('类中变量')
                     ivar_index = result // 0x8 - 1
                     ivar = class_data.ivars[ivar_index]
                     comment = ivar.name
 
                 elif obj_name_key in mach_info.cfstrings:  # 某个字符串的方法
-                    print('某个字符串')
                     # comment = mach_info.cfstrings[obj_name_key]
                     pass
                 elif obj_name_key in mach_info.statics:  # 静态变量
-                    print('静态变量')
                     comment = mach_info.statics[obj_name_key]
 
             if comment is not None:
@@ -941,6 +933,8 @@ def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue=None):
             mach_info.file_provider = macho_file_provider
     msg_queue.put('Analyze Mach-O file finish')
 
+    methods_hubs = []  # [method_hub]
+
     for mach_info in mach_container.mach_objects:
         arch = CS_ARCH_ALL
         mode = CS_MODE_32
@@ -1030,6 +1024,8 @@ def static_analysis(binary_file, app_name, arch=0):
         mode = Analyse_Both
 
     mach_container = MachContainer(mach_o_file.read(), file_provider=macho_file_provider, mode=mode)
+
+    methods_hubs = []
 
     for mach_info in mach_container.mach_objects:
         arch = CS_ARCH_ALL

@@ -22,7 +22,7 @@
 </head>
 <body>
 <nav class="navbar navbar-light bg-light">
-    <a class="navbar-brand">
+    <a class="navbar-brand" href="/">
         <img src="/static/imgs/icon.png" class="d-inline-block align-top" height="30" alt="">
         CodeKnife
     </a>
@@ -80,7 +80,7 @@
         </ul>
     </div>
 
-    <div class="col" style="background: white; padding-left: 0; height: 100%; padding-right: 0; margin-right: 15px;">
+    <div class="col" style="background: white; padding-left: 0; height: 100%; padding-right: 0; margin-right: 15px; width: calc(100% - 300px);">
         <div class="editor-toolbar">
             {% if checker_file %}
             <input class="editor-file-name" type="text" value="{{checker_file[:-3]}}">

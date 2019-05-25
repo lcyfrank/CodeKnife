@@ -13,6 +13,7 @@ from models.macho_method_hub import *
 from models.mongo_storage import *
 from cfg_generator import *
 from urllib import parse
+from executor.checker_executor import *
 
 ALLOWED_EXTENSIONS = {'app', 'ipa'}
 app = Flask(__name__)
@@ -338,10 +339,20 @@ def binary_analysis_checkers_edit(file_md5):
 
 @app.route('/analysis/binary/<file_md5>/execute', methods=['POST'])
 def binary_analysis_execute_checker(file_md5):
-    code_bytes: bytes = request.stream.read()
-    code = code_bytes.decode('utf-8')
+    global _g_md5_object
+    global _g_md5_messages
+
+    basic_info = load_basic_info_of_md5(file_md5)
+    if basic_info is not None:
+        if file_md5 not in _g_process_msg_queues:
+            if file_md5 in _g_md5_object:
+                mach_info, method_hub = _g_md5_object[file_md5]
+                code_bytes: bytes = request.stream.read()
+                code = code_bytes.decode('utf-8')
+                execute_results = execute_checker(code, mach_info, method_hub)
+                return jsonify(execute_results)
     # Execute this code
-    return 'OK'
+    return jsonify(['Error'])
 
 
 @app.route('/analysis/binary/save', methods=['POST'])

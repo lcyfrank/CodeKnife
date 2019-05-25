@@ -51,6 +51,7 @@
     font-weight: 500;
     margin-left: 10px;
     margin-top: 10px;
+    width: 50%;
     border: none;
 }
 
@@ -61,4 +62,23 @@
     font-family: Menlo, Monaco, Consolas, "Andale Mono", "lucida console", "Courier New", monospace;
     font-size: 15px;
     width: 100%;
+    max-height: calc(50% - 45px);
+    overflow: scroll;
+}
+
+.checker-result span {
+    color: #313131;
+    font-weight: bold;
+}
+
+.checker-result-success {
+    color: #007bff;
+    font-size: 13px;
+    margin: 0;
+}
+
+.checker-result-error {
+    color: #dc3545;
+    font-size: 13px;
+    margin: 0;
 }

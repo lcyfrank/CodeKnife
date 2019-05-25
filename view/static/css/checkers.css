@@ -35,8 +35,13 @@
 }
 
 .checkers-item p a {
+    display: inline-block;
     color: #000;
     font-weight: 500;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .checkers-toolbar {
