@@ -273,6 +273,7 @@ def binary_analysis_methods(file_md5):
 
                         method_instruction = method_hub.get_method_insn(class_name, method_name)
                         cfg = generate_cfg(method_instruction, cfg_provider, False).convert_to_dict()
+                        print(cfg)
                 else:
                     method_insn = None
 

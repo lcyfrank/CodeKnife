@@ -16,9 +16,7 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
             cfg_block = CFGBlock(name_prefix + hex(instruction.address))
             if len(wait_for_follow) > 0:
                 for fol_block in wait_for_follow:
-                    # print(fol_block.name, end=' ')
                     fol_block.goto_block(cfg_block.name, label='return')
-                # print('')
                 wait_for_follow = []
 
         # 对于调用有 Block 的方法，现在还想不到好的解决办法
@@ -100,6 +98,13 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
                             cfg_node.oc_blocks.append(oc_block_cfg)
             cfg_block.add_node(cfg_node)
 
+        else:
+            cfg_node = CFGNode(CFGNodeTypeOther)
+
+            instruction_fregment = instruction.instruction.split('\t')[2:]
+            cfg_node.other_str = ' '.join(instruction_fregment)
+            cfg_block.add_node(cfg_node)
+
     if cfg_block is not None:
         cfg_blocks.append(cfg_block)
 
@@ -107,7 +112,6 @@ def generate_cfg_block(block, info_provider, class_name, method_name, recursive=
 
 
 def generate_cfg(method, info_provider, recursive=False, name_prefix=''):
-    # print('Current generate CFG of method: %s in class: %s' % (method.method_name, method.class_name))
 
     wait_blocks_queue = []
 
@@ -147,36 +151,6 @@ def generate_cfg(method, info_provider, recursive=False, name_prefix=''):
                     method.all_blocks[block.next_block] not in wait_blocks_queue):
                     wait_blocks_queue.append(method.all_blocks[block.next_block])
     return cfg
-
-    # for i in range(len(method.instructions)):
-    #     instruction = method.instructions[i]
-    #     if instruction.goto_insns:
-    #         basic_info, imp_name = instruction.goto_insns
-    #         if basic_info == '$Function':  # function
-    #             if filter_oc_function(imp_name):
-    #                 continue
-    #             if recursive:
-    #                 recursive_function = info_provider(basic_info, imp_name)
-    #                 if recursive_function is not None:
-    #                     recursive_cfg = generate_cfg(recursive_function, info_provider, True)
-    #                     for recursive_cfg_node in recursive_cfg.nodes:
-    #                         cfg.add_node(recursive_cfg_node)
-    #                     continue
-    #             cfg_node = CFGNode(CFGNodeTypeFunction)
-    #             cfg_node.function_name = imp_name
-    #         else:  # method
-    #             if recursive:
-    #                 recursive_method = info_provider(basic_info, imp_name)
-    #                 if recursive_method is not None:
-    #                     recursive_cfg = generate_cfg(recursive_method, info_provider, True)
-    #                     for recursive_cfg_node in recursive_cfg.nodes:
-    #                         cfg.add_node(recursive_cfg_node)
-    #                     continue
-    #             cfg_node = CFGNode(CFGNodeTypeMethod)
-    #             cfg_node.class_name = basic_info
-    #             cfg_node.method_name = imp_name
-    #         cfg.add_node(cfg_node)
-    # return cfg
 
 
 def filter_oc_function(function):

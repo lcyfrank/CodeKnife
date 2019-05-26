@@ -55,8 +55,17 @@
     width: 100%;
 }
 
+.methods-view-type {
+
+}
+
+.methods-show-all {
+    display: inline-block;
+    /*margin-top: 10px;*/
+}
+
 .methods-option {
-    margin-top: 10px;
+    /*margin-top: 10px;*/
     margin-bottom: 10px;
     margin-left: 10px;
     font-weight: 300;
@@ -119,8 +128,9 @@
 }
 
 .methods-title {
+    margin-top: 10px;
     display: inline-block;
-    width: calc(100% - 120px);
+    width: calc(100% - 230px);
     text-align: center;
     margin-left: auto;
     margin-right: auto;

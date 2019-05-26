@@ -384,6 +384,13 @@ class CKCallee:
         return methods_result
 
 
+class CKNotification:
+
+    def handler(self, notifications: list):
+        global _g_mach_info
+        
+
+
 def convert_inner_type(obj):
     if type(obj) == str:
         return obj

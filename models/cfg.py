@@ -4,6 +4,7 @@ import os
 
 CFGNodeTypeFunction = 0
 CFGNodeTypeMethod = 1
+CFGNodeTypeOther = 2
 
 
 class CFG:
@@ -117,6 +118,7 @@ class CFGBlock:
             self.nodes[-1].describe()
 
     def convert_to_dict(self):
+        print(self.follow_label)
         cfg_block_dict = {'name': self.name, 'out': self.out,
                           'follow_blocks': self.follow_blocks, 'follow_label': self.follow_label}
         node_list = []
@@ -133,13 +135,16 @@ class CFGNode:
         self.class_name = ''
         self.method_name = ''
         self.function_name = ''
+        self.other_str = ''
         self.oc_blocks = []
 
     def node_info(self):
         if self.type == CFGNodeTypeFunction:
             return self.function_name
-        else:
+        elif self.type == CFGNodeTypeMethod:
             return self.class_name, self.method_name
+        else:
+            return self.other_str
 
     def describe(self, verbose=True):
         if self.type == CFGNodeTypeFunction:
@@ -154,7 +159,11 @@ class CFGNode:
 
     def convert_to_dict(self):
         node_dict = {'type': self.type, 'class_name': self.class_name, 'method_name': self.method_name,
-                     'function_name': self.function_name}
+                     'function_name': self.function_name, 'other_str': self.other_str}
+        oc_block_list = []
+        for oc_block in self.oc_blocks:
+            oc_block_list.append(oc_block.convert_to_dict())
+        node_dict['oc_blocks'] = oc_block_list
         return node_dict
 
 class CFGDataFlow:
