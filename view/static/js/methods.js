@@ -321,7 +321,7 @@ function draw_graph(all) {
                 nodeDataArray.push({
                     key: oc_block_cfg.name,
                     loc: '' + (each_width / 2 + each_width * level_block - 200) + ' ' + (current_height + (oc_block_cfg_index - oc_block_cfgs.length / 2) * 10),
-                    text: oc_block_cfg.name
+                    items: [{text: oc_block_cfg.name, color: 'rgba(100, 100, 100, 100)'}]
                 });
                 linkDataArray.push({
                     from: block_name, to: oc_block_cfg.name, fromPort: 'L', toPort: 'R',
