@@ -12,7 +12,9 @@ function init_graph() {
         return [
             new go.Binding('location', 'loc', go.Point.parse).makeTwoWay(go.Point.stringify),
             {
-                locationSpot: go.Spot.Center
+                locationSpot: go.Spot.Center,
+                isShadowed: true,
+                shadowColor: "#C5C1AA"
             }
         ];
     }
@@ -49,20 +51,52 @@ function init_graph() {
         }
     }
 
+    var itemTempl = GO(go.Panel, "Horizontal",
+        GO(go.TextBlock,
+            {
+                stroke: "black",
+                font: "11px Menlo, Monaco, Consolas, 'Andale Mono', 'lucida console', 'Courier New', monospace",
+                margin: new go.Margin(3, 0, 3, 0)
+            },
+            new go.Binding("text", "text"),
+            new go.Binding('stroke', 'color'),
+            new go.Binding('visible', 'normal')),
+        GO(go.TextBlock,
+            {
+                stroke: "black",
+                font: "bold 11px Menlo, Monaco, Consolas, 'Andale Mono', 'lucida console', 'Courier New', monospace",
+                desiredSize: new go.Size(50, 15),
+                visible: false
+            },
+            new go.Binding("text", "instruction"),
+            new go.Binding('visible', 'code')),
+        GO(go.TextBlock,
+            {
+                stroke: "#3F7FEE",
+                font: "11px Menlo, Monaco, Consolas, 'Andale Mono', 'lucida console', 'Courier New', monospace",
+                visible: false
+            },
+            new go.Binding("text", "operands"),
+            new go.Binding('visible', 'code'))
+    );
+
+
     graph.nodeTemplateMap.add('',
         GO(go.Node, 'Table', nodeStyle(),
             GO(go.Panel, 'Auto',
                 GO(go.Shape, 'Rectangle',
                     {fill: 'white', strokeWidth: 1},
                     new go.Binding('figure', 'figure')),
-                GO(go.TextBlock, textStyle(),
+                GO(go.Panel, 'Vertical',
                     {
-                        margin: 8,
-                        // maxSize: new go.Size(160, NaN),
-                        wrap: go.TextBlock.WrapFit,
-                        editable: false
+                        row: 1,
+                        padding: 8,
+                        alignment: go.Spot.TopLeft,
+                        defaultAlignment: go.Spot.Left,
+                        stretch: go.GraphObject.Horizontal,
+                        itemTemplate: itemTempl
                     },
-                    new go.Binding('text').makeTwoWay())
+                    new go.Binding('itemArray', 'items'))
             ),
 
             makePort("T", go.Spot.Top, go.Spot.TopSide, false, true),
@@ -192,7 +226,7 @@ function draw_graph(all) {
     var linkDataArray = [];
 
     var graph_total_width = 500;
-    var line_height = 12;
+    var line_height = 15;
 
     var current_height = 0;
 
@@ -211,6 +245,7 @@ function draw_graph(all) {
 
             var oc_block_cfgs = [];
 
+            var node_items = [];
             for (var node_index in block.nodes) {
                 var node = block.nodes[node_index];
                 if (node.type === 0) {
@@ -219,27 +254,63 @@ function draw_graph(all) {
                     }
                     total_height += line_height;
                     node_label = node_label + node.function_name;
+                    if (all) {
+                        node_items.push({
+                            text: (node.function_name),
+                            color: '#53A351',
+                            normal: true
+                        });
+                    } else {
+                        node_items.push({
+                            text: (node.function_name),
+                            color: 'rgba(15, 15, 15, 100)',
+                            normal: true
+                        });
+                    }
                 } else if (node.type == 1) {
                     if (node_label != 0) {
                         node_label = node_label + '\n';
                     }
                     total_height += line_height;
                     node_label = node_label + '[' + node.class_name + ' ' + node.method_name + ']';
+                    if (all) {
+                        node_items.push({
+                            text: ('[' + node.class_name + ' ' + node.method_name + ']'),
+                            color: '#53A351',
+                            normal: true
+                        });
+                    } else {
+                        node_items.push({
+                            text: ('[' + node.class_name + ' ' + node.method_name + ']'),
+                            color: 'rgba(15, 15, 15, 100)',
+                            normal: true
+                        });
+                    }
                 } else if (all) {
                     if (node_label != 0) {
                         node_label = node_label + '\n';
                     }
                     total_height += line_height;
-                    node_label = node_label + node.other_str;
+                    var instruction = '';
+                    var ins_fragment = node.other_str.split(' ');
+                    instruction += ins_fragment[0];
+                    for (var i = ins_fragment[0].length; i <= 8; ++i)
+                        instruction += ' ';
+                    var operands = '';
+                    for (var i = 1; i < ins_fragment.length; ++i) {
+                        operands += ins_fragment[i];
+                    }
+
+                    node_items.push({instruction: instruction, operands: operands, normal: false, code: true});
                 }
 
                 for (var oc_block_index in node.oc_blocks) {
                     oc_block_cfgs.push(node.oc_blocks[oc_block_index])
                 }
             }
-            if (node_label.length === 0) {
-                node_label = '{NON_API_CALLED}';
+            if (node_items.length === 0) {
                 total_height = 20 + line_height;
+                node_items.push({text: '{NON_API_CALLED}', color: 'rgba(100, 100, 100, 100)'});
             }
             node_label = 'Name: ' + block_name + '\n\n' + node_label;
             total_height += line_height * 2;
@@ -266,7 +337,8 @@ function draw_graph(all) {
             nodeDataArray.push({
                 key: block_name,
                 loc: '' + (each_width / 2 + each_width * level_block) + ' ' + current_height,
-                text: node_label,
+                // text: node_label,
+                items: node_items,
                 title: block_name
             });
         }
