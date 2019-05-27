@@ -1,20 +1,30 @@
-var graph = null;
+var cfg_graph = null;
+var dfg_graph = null;
 
 function init_graph() {
     const GO = go.GraphObject.make;
-    graph = GO(go.Diagram, 'methods-cfgs', {
-        // "LinkDrawn": showLinkLabel,
-        // "LinkRelinked": showLinkLabel
-    });
-    graph.allowDelete = false;
+    cfg_graph = GO(go.Diagram, 'methods-cfgs', {});
+    cfg_graph.allowDelete = false;
 
-    function nodeStyle() {
+    dfg_graph = GO(go.Diagram, 'methods-dfgs', {});
+    dfg_graph.allowDelete = false;
+
+    function cfg_nodeStyle() {
         return [
             new go.Binding('location', 'loc', go.Point.parse).makeTwoWay(go.Point.stringify),
             {
                 locationSpot: go.Spot.Center,
                 isShadowed: true,
-                shadowColor: "#C5C1AA"
+                shadowColor: "#C5C1AA",
+            }
+        ];
+    }
+
+    function dfg_nodeStyle() {
+        return [
+            new go.Binding('location', 'loc', go.Point.parse).makeTwoWay(go.Point.stringify),
+            {
+                locationSpot: go.Spot.Center,
             }
         ];
     }
@@ -42,13 +52,6 @@ function init_graph() {
                 mouseLeave: function (e, port) {
                 }
             });
-    }
-
-    function textStyle() {
-        return {
-            font: "11px Helvetica, Arial, sans-serif",
-            stroke: "black"
-        }
     }
 
     var itemTempl = GO(go.Panel, "Horizontal",
@@ -80,9 +83,31 @@ function init_graph() {
             new go.Binding('visible', 'code'))
     );
 
+    cfg_graph.nodeTemplateMap.add('',
+        GO(go.Node, 'Table', cfg_nodeStyle(),
+            GO(go.Panel, 'Auto',
+                GO(go.Shape, 'Rectangle',
+                    {fill: 'white', strokeWidth: 1},
+                    new go.Binding('figure', 'figure')),
+                GO(go.Panel, 'Vertical',
+                    {
+                        row: 1,
+                        padding: 8,
+                        alignment: go.Spot.TopLeft,
+                        defaultAlignment: go.Spot.Left,
+                        stretch: go.GraphObject.Horizontal,
+                        itemTemplate: itemTempl
+                    },
+                    new go.Binding('itemArray', 'items'))
+            ),
 
-    graph.nodeTemplateMap.add('',
-        GO(go.Node, 'Table', nodeStyle(),
+            makePort("T", go.Spot.Top, go.Spot.TopSide, false, true),
+            makePort("L", go.Spot.Left, go.Spot.LeftSide, true, true),
+            makePort("R", go.Spot.Right, go.Spot.RightSide, true, true),
+            makePort("B", go.Spot.Bottom, go.Spot.BottomSide, true, false)
+        ));
+    dfg_graph.nodeTemplateMap.add('',
+        GO(go.Node, 'Table', dfg_nodeStyle(),
             GO(go.Panel, 'Auto',
                 GO(go.Shape, 'Rectangle',
                     {fill: 'white', strokeWidth: 1},
@@ -105,7 +130,51 @@ function init_graph() {
             makePort("B", go.Spot.Bottom, go.Spot.BottomSide, true, false)
         ));
 
-    graph.linkTemplate =
+    cfg_graph.linkTemplate =
+        GO(go.Link,
+            {
+                routing: go.Link.AvoidsNodes,
+                curve: go.Link.JumpOver,
+                corner: 5, toShortLength: 4,
+                // relinkableFrom: true,
+                // relinkableTo: true,
+                reshapable: true,
+                resegmentable: true,
+
+                mouseEnter: function (e, link) {
+                    link.findObject('HIGHLIGHT').stroke = 'rgba(30,144,255,0.2)';
+                },
+                mouseLeave: function (e, link) {
+                    link.findObject('HIGHLIGHT').stroke = 'transparent';
+                },
+                selectionAdorned: false
+            },
+            new go.Binding('points').makeTwoWay(),
+            GO(go.Shape,
+                {isPanelMain: true, strokeWidth: 8, stroke: 'transparent', name: 'HIGHLIGHT'}),
+            GO(go.Shape,
+                {isPanelMain: true, stroke: "gray", strokeWidth: 2},
+                new go.Binding('stroke', 'color'),
+                new go.Binding('strokeDashArray', 'dash')),
+            GO(go.Shape,
+                {toArrow: "standard", strokeWidth: 0, fill: "gray"},
+                new go.Binding('fill', 'color')),
+            GO(go.Panel, 'Auto',
+                {visible: false, name: "LABEL", segmentIndex: 2, segmentFraction: 0.5},
+                new go.Binding('visible', 'visible').makeTwoWay(),
+                GO(go.Shape, 'RoundedRectangle',
+                    {fill: '#f8f8f8', strokeWidth: 0}),
+                GO(go.TextBlock, 'Yes',
+                    {
+                        textAlign: 'center',
+                        font: '10px helvetica, arial, sans-serif',
+                        stroke: '#333333',
+                        editable: true
+                    },
+                    new go.Binding('text').makeTwoWay())
+            )
+        );
+    dfg_graph.linkTemplate =
         GO(go.Link,
             {
                 routing: go.Link.AvoidsNodes,
@@ -151,12 +220,12 @@ function init_graph() {
         );
 }
 
-function draw_graph(all) {
+function draw_cfg_graph(all) {
 
-    if (graph == null) {
+    if (cfg_graph == null) {
         init_graph();
         cfg_model = JSON.parse(cfg_model);
-
+        data_flows_model = JSON.parse(data_flows_model);
     }
 
     var block_pair = new Array();
@@ -174,7 +243,6 @@ function draw_graph(all) {
     while (waited_names.length > 0) {
         var name = waited_names.shift();
         visited_names.add(name);
-
         for (var follow_index in block_pair[name].follow_blocks) {
             var follow = block_pair[name].follow_blocks[follow_index];
             if (!visited_names.has(follow))
@@ -218,14 +286,14 @@ function draw_graph(all) {
         block_level[block_name] = maximal_level;
     }
 
-    var modelJson = {};
-    modelJson['class'] = 'go.GraphLinksModel';
-    modelJson['linkFromPortIdProperty'] = 'fromPort';
-    modelJson['linkToPortIdProperty'] = 'toPort';
-    var nodeDataArray = [];
-    var linkDataArray = [];
+    var cfg_modelJson = {};
+    cfg_modelJson['class'] = 'go.GraphLinksModel';
+    cfg_modelJson['linkFromPortIdProperty'] = 'fromPort';
+    cfg_modelJson['linkToPortIdProperty'] = 'toPort';
+    var cfg_nodeDataArray = [];
+    var cfg_linkDataArray = [];
 
-    var graph_total_width = 500;
+    var graph_total_width = 300;
     var line_height = 15;
 
     var current_height = 0;
@@ -317,13 +385,12 @@ function draw_graph(all) {
 
             for (var oc_block_cfg_index in oc_block_cfgs) {
                 var oc_block_cfg = oc_block_cfgs[oc_block_cfg_index];
-                console.log(oc_block_cfg);
-                nodeDataArray.push({
+                cfg_nodeDataArray.push({
                     key: oc_block_cfg.name,
                     loc: '' + (each_width / 2 + each_width * level_block - 200) + ' ' + (current_height + (oc_block_cfg_index - oc_block_cfgs.length / 2) * 10),
                     items: [{text: oc_block_cfg.name, color: 'rgba(100, 100, 100, 100)'}]
                 });
-                linkDataArray.push({
+                cfg_linkDataArray.push({
                     from: block_name, to: oc_block_cfg.name, fromPort: 'L', toPort: 'R',
                     color: 'rgba(230, 100, 20, 50)', dash: [3, 2], visible: true, text: 'OC Block'
                 })
@@ -331,20 +398,16 @@ function draw_graph(all) {
 
             if (total_height > line_max_height) line_max_height = total_height;
             current_height += (line_max_height + 20) / 2;
-            console.log('height');
-            console.log(line_max_height);
-            console.log(current_height);
-            nodeDataArray.push({
+            cfg_nodeDataArray.push({
                 key: block_name,
                 loc: '' + (each_width / 2 + each_width * level_block) + ' ' + current_height,
-                // text: node_label,
                 items: node_items,
-                title: block_name
             });
         }
         current_height += (line_max_height + 20) / 2;
     }
-    modelJson['nodeDataArray'] = nodeDataArray;
+
+    cfg_modelJson['nodeDataArray'] = cfg_nodeDataArray;
     for (var block_index in cfg_model.all_blocks) {
         var block = cfg_model.all_blocks[block_index];
         var current_level = block_level[block.name];
@@ -361,92 +424,121 @@ function draw_graph(all) {
             console.log(block);
             console.log(block.follow_label);
 
-            linkDataArray.push(linkData);
+            cfg_linkDataArray.push(linkData);
 
         }
     }
-    modelJson['linkDataArray'] = linkDataArray;
+    cfg_modelJson['linkDataArray'] = cfg_linkDataArray;
+    cfg_graph.model = go.Model.fromJson(JSON.stringify(cfg_modelJson));
+}
 
-    graph.model = go.Model.fromJson(JSON.stringify(modelJson));
-    // graph.model = go.Model.fromJson(
-    //     '{ "class": "go.GraphLinksModel",\n' +
-    //     '  "linkFromPortIdProperty": "fromPort",\n' +
-    //     '  "linkToPortIdProperty": "toPort",\n' +
-    //     '  "nodeDataArray": [\n' +
-    //     '{"key":-1, "loc":"175 0", "text":"Start"},\n' +
-    //     '{"key":0, "loc":"-5 75", "text":"Preheat oven to 375 F"},\n' +
-    //     '{"key":1, "loc":"175 100", "text":"In a bowl, blend: 1 cup margarine, 1.5 teaspoon vanilla, 1 teaspoon salt"},\n' +
-    //     '{"key":2, "loc":"175 200", "text":"Gradually beat in 1 cup sugar and 2 cups sifted flour"},\n' +
-    //     '{"key":3, "loc":"175 290", "text":"Mix in 6 oz (1 cup) Nestle\'s Semi-Sweet Chocolate Morsels"},\n' +
-    //     '{"key":4, "loc":"175 380", "text":"Press evenly into ungreased 15x10x1 pan"},\n' +
-    //     '{"key":5, "loc":"355 85", "text":"Finely chop 1/2 cup of your choice of nuts"},\n' +
-    //     '{"key":6, "loc":"175 450", "text":"Sprinkle nuts on top"},\n' +
-    //     '{"key":7, "loc":"175 515", "text":"Bake for 25 minutes and let cool"},\n' +
-    //     '{"key":8, "loc":"175 585", "text":"Cut into rectangular grid"},\n' +
-    //     '{"key":-2, "category":"End", "loc":"175 660", "text":"Enjoy!"}\n' +
-    //     ' ],\n' +
-    //     '  "linkDataArray": [\n' +
-    //     '{"from":1, "to":2, "fromPort":"B", "toPort":"T", "visible": "true", "text": "test"},\n' +
-    //     '{"from":2, "to":3, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":3, "to":4, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":4, "to":6, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":6, "to":7, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":7, "to":8, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":8, "to":-2, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":-1, "to":0, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":-1, "to":1, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":-1, "to":5, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":5, "to":4, "fromPort":"B", "toPort":"T"},\n' +
-    //     '{"from":0, "to":4, "fromPort":"B", "toPort":"T"}\n' +
-    //     ' ]}'
-    // );
+function draw_dfg_graph() {
+    if (cfg_graph == null) {
+        init_graph();
+        cfg_model = JSON.parse(cfg_model);
+        data_flows_model = JSON.parse(data_flows_model);
+    }
+    var dfg_modelJson = {};
+    dfg_modelJson['class'] = 'go.GraphLinksModel';
+    dfg_modelJson['linkFromPortIdProperty'] = 'fromPort';
+    dfg_modelJson['linkToPortIdProperty'] = 'toPort';
+    var dfg_nodeDataArray = [];
+    var dfg_linkDataArray = [];
 
-// cfg_model = JSON.parse(cfg_model);
-// var nodeDataArray = [];
-//
-// for (var block_index in cfg_model.all_blocks) {
-//     var block = cfg_model.all_blocks[block_index];
-//     var node_name = block.name;
-//     console.log(node_name);
-//
-//     var node_label = '';
-//     for (var node_index in block.nodes) {
-//         var node = block.nodes[node_index];
-//         if (node.type == 0) {
-//             node_label = node_label + node.function_name;
-//             node_label = node_label + '\n';
-//         } else {
-//             node_label = node_label + node.class_name + ': ' + node.method_name;
-//             node_label = node_label + '\n';
-//         }
-//     }
-//     if (node_label.length === 0) {
-//         node_label = '{NON_API_CALLED}';
-//     }
-//     nodeDataArray.push({
-//         key: node_name,
-//         content: node_label
-//     });
-// }
-//
-// var model = GO(go.GraphLinksModel);
-// model.nodeDataArray = nodeDataArray;
-//
-// var linkDataArray = [];
-// for (var block_index in cfg_model.all_blocks) {
-//     var block = cfg_model.all_blocks[block_index];
-//     for (var follow_index in block.follow_blocks) {
-//         var follow = block.follow_blocks[follow_index];
-//         linkDataArray.push({from: block.name, to: follow})
-//     }
-// }
-// model.linkDataArray = linkDataArray;
-// graph.model = model;
+    var graph_total_width = 300;
+
+    var update_data_flow_names = new Array();
+    for (var df_source_name in data_flows_model) {
+        update_data_flow_names.push(df_source_name);
+    }
+
+    var data_flow_pair = {};
+    var data_flow_level = {};
+    while (update_data_flow_names.length > 0) {
+        var data_flow_name = update_data_flow_names.shift();
+        var base_level = 0;
+        if (data_flow_level.hasOwnProperty(data_flow_name)) {
+            base_level = data_flow_level[data_flow_name];
+        }
+        data_flow_level[data_flow_name] = base_level;
+
+        var data_flow = data_flows_model[data_flow_name];
+        var flow_tos = data_flow.flow_to;
+        for (var flow_to_index in flow_tos) {
+            var flow_to = flow_tos[flow_to_index];
+            var flow_to_name = '0x' + Number(flow_to[0].address).toString(16);
+            data_flow_level[flow_to_name] = base_level + 1;
+            data_flow_pair[flow_to_name] = flow_to;
+            if (data_flows_model.hasOwnProperty(flow_to_name)) {
+                update_data_flow_names.push(flow_to_name);
+            }
+        }
+    }
+
+    var level = new Array();
+    for (var df_name in data_flow_level) {
+        if (!level.hasOwnProperty(data_flow_level[df_name])) {
+            level[data_flow_level[df_name]] = new Array();
+        }
+        level[data_flow_level[df_name]].push(df_name);
+    }
+
+    for (var level_number in level) {  // 每一行
+        var df_count = level[level_number].length;
+        if (df_count <= 0) continue;
+
+        var each_width = graph_total_width / df_count;
+        for (var df_index in level[level_number]) {  // 每一列
+            var df_name = level[level_number][df_index];
+            var data_flow = data_flows_model[df_name];
+            if (data_flow === undefined) {
+                data_flow = data_flow_pair[df_name];
+                var df_text = data_flow[0];
+                if (typeof data_flow[0] !== "string") {
+                    df_text = '[' + data_flow[0].goto_insns + ']';
+                }
+                dfg_nodeDataArray.push({
+                    key: 'df' + df_name,
+                    loc: '' + (300 + each_width / 2 + each_width * df_index) + ' ' + (70 * level_number),
+                    items: [{text: df_text, color: 'rgba(100, 100, 100, 100)'}],
+                });
+            } else {
+                var df_text = df_name;
+                if (typeof data_flow.source !== "string") {
+                    df_text = '[' + data_flow.source.goto_insns + ']';
+                }
+                dfg_nodeDataArray.push({
+                    key: 'df' + df_name,
+                    loc: '' + (300 + each_width / 2 + each_width * df_index) + ' ' + (70 * level_number),
+                    items: [{text: df_text, color: 'rgba(100, 100, 100, 100)'}],
+                });
+
+                for (var flow_to_index in data_flow.flow_to) {
+                    var flow_to_position = data_flow.flow_to[flow_to_index];
+                    var flow_to = flow_to_position[0];
+                    var position = flow_to_position[1];
+                    dfg_linkDataArray.push({
+                        from: 'df' + df_name,
+                        to: 'df0x' + Number(flow_to.address).toString(16),
+                        fromPort: 'B',
+                        toPort: 'T',
+                        color: 'rgba(0, 0, 0, 50)',
+                        visible: true,
+                        text: position
+                    })
+                }
+            }
+        }
+    }
+    dfg_modelJson['nodeDataArray'] = dfg_nodeDataArray;
+    dfg_modelJson['linkDataArray'] = dfg_linkDataArray;
+    dfg_graph.model = go.Model.fromJson(JSON.stringify(dfg_modelJson));
 }
 
 $(function () {
     if (cfg_model != 'null') {
-        draw_graph(false);
+        draw_cfg_graph(false);
+        draw_dfg_graph();
     }
     $('input[type=radio][name=options]').change(function () {
         if (this.id == 'methods-text') {
@@ -461,7 +553,7 @@ $(function () {
     });
 
     $('.methods-show-all').find('input').change(function () {
-        draw_graph(this.checked);
+        draw_cfg_graph(this.checked);
     });
 
     $('.methods-class-selector').change(function () {

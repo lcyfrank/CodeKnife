@@ -50,6 +50,24 @@
     overflow: scroll;
 }
 
+.methods-graph-cfg {
+    display: inline-block;
+    width: 49%;
+    height: 100%;
+    overflow: scroll;
+}
+
+.methods-graph-dfg {
+    display: inline-block;
+    width: 49%;
+    height: 100%;
+    overflow: scroll;
+}
+
+.methods-graphs {
+
+}
+
 .methods-detail-toolbar {
     height: 45px;
     width: 100%;

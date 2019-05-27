@@ -31,6 +31,9 @@ objc_methods_return_type = {
         'addSubview:': 'None',
         'setBackgroundColor:': 'None',
         'setAlpha:': 'None'
+    },
+    'NSArray': {
+        'arrayWithObjects:count:': 'NSArray'
     }
 }
 

@@ -16,7 +16,7 @@ class MethodDataFlow:
             else:
                 self.source = Instruction(ins_dict=mdf_dict['source'])
             self.flow_to = []
-            flow_to_list = eval(mdf_dict['flow_to'])
+            flow_to_list = mdf_dict['flow_to']
             for to_item, position in flow_to_list:
                 if type(to_item) == dict:
                     self.flow_to.append((Instruction(ins_dict=to_item), position))
@@ -65,7 +65,7 @@ class MethodDataFlow:
                 flow_to_list.append((to_item, position))
             else:
                 flow_to_list.append((to_item.convert_to_dict(), position))
-        mdf_dict['flow_to'] = str(flow_to_list)
+        mdf_dict['flow_to'] = flow_to_list
         return mdf_dict
 
 
@@ -140,7 +140,7 @@ class MethodInstructions:
                 if data_flow_key.startswith('Parameter'):
                     self.data_flows[data_flow_key] = MethodDataFlow(mdf_dict=data_flows_dict[data_flow_key])
                 else:
-                    self.data_flows[Instruction(ins_dict=eval(data_flow_key))] = MethodDataFlow(mdf_dict=data_flows_dict[data_flow_key])
+                    self.data_flows[data_flow_key] = MethodDataFlow(mdf_dict=data_flows_dict[data_flow_key])
 
     def describe(self):
         print("<%s: %s>" % (self.class_name, self.method_name))
@@ -162,8 +162,8 @@ class MethodInstructions:
     def add_data_flow_from_instruction(self, instruction, destination, position):
         if instruction not in self.data_flows:
             data_flow = MethodDataFlow(MethodDataFlowTypeInstruction, instruction)
-            self.data_flows[instruction] = data_flow
-        data_flow: MethodDataFlow = self.data_flows[instruction]
+            self.data_flows[hex(instruction.address)] = data_flow
+        data_flow: MethodDataFlow = self.data_flows[hex(instruction.address)]
         data_flow.flow(destination, position)
 
     def add_data_flow_from_parameter_to_out(self, parameter):
@@ -176,8 +176,8 @@ class MethodInstructions:
     def add_data_flow_from_instruction_to_out(self, instruction):
         if instruction not in self.data_flows:
             data_flow = MethodDataFlow(MethodDataFlowTypeInstruction, instruction)
-            self.data_flows[instruction] = data_flow
-        data_flow: MethodDataFlow = self.data_flows[instruction]
+            self.data_flows[hex(instruction.address)] = data_flow
+        data_flow: MethodDataFlow = self.data_flows[hex(instruction.address)]
         data_flow.flow('Out', 0)
 
     def convert_to_dict(self):
@@ -195,10 +195,8 @@ class MethodInstructions:
         data_flows = {}
         for data_flow_key in self.data_flows:
             if type(data_flow_key) == str:
-                print(data_flow_key)
                 data_flows[data_flow_key] = self.data_flows[data_flow_key].convert_to_dict()
             else:
-                print(data_flow_key)
                 data_flows[str(data_flow_key.convert_to_dict())] = self.data_flows[data_flow_key].convert_to_dict()
         mi_dict['data_flows'] = str(data_flows)
         return mi_dict
@@ -214,9 +212,20 @@ class Instruction:
             self.block_data = []  # 这个 Block 代表 OC 的 Block
         else:
             self.address = ins_dict['address']
-            self.instruction = ins_dict['instruction']
-            self.goto_insns = eval(ins_dict['goto_insns'])
-            self.block_data = eval(ins_dict['block_data'])
+            instruction = ins_dict['instruction']
+            self.instruction = instruction.replace('\\t', '\t')
+            if len(ins_dict['goto_insns']) > 0:
+                goto_insns = ins_dict['goto_insns'].split(' ')
+                _class = goto_insns[0]
+                method = goto_insns[1]
+                self.goto_insns = (_class, method)
+            else:
+                self.goto_insns = None
+
+            block_datas = []
+            for block_name in ins_dict['block_data']:
+                block_datas.append(('$Block', block_name))
+            self.block_data = block_datas
 
     def goto(self, class_name, method_name):
         self.goto_insns = (class_name, method_name)
@@ -225,8 +234,19 @@ class Instruction:
         self.block_data.append(('$Block', block_name))
 
     def convert_to_dict(self):
-        ins_dict = {'address': self.address, 'instruction': self.instruction,
-                    'goto_insns': str(self.goto_insns), 'block_data': str(self.block_data)}
+        if self.goto_insns is not None:
+            _class, method = self.goto_insns
+            goto_insns_str = _class + ' ' + method
+        else:
+            goto_insns_str = ''
+
+        block_datas = []
+        for _, block_name in self.block_data:
+            block_datas.append(block_name)
+
+        instruction = self.instruction.replace('\t', '\\t')
+        ins_dict = {'address': self.address, 'instruction': instruction,
+                    'goto_insns': goto_insns_str, 'block_data': block_datas}
         return ins_dict
 
 

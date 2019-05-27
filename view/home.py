@@ -261,6 +261,7 @@ def binary_analysis_methods(file_md5):
                                 method_name_list.append((method_insn_address, '[' + class_name + ' ' + method_insn.method_name + ']'))
 
                 cfg = None
+                data_flows = None
                 if address:
                     address_key = hex(address)
                     method_insn = method_hub.cs_insns[address_key]
@@ -272,14 +273,16 @@ def binary_analysis_methods(file_md5):
                             return method_instruction
 
                         method_instruction = method_hub.get_method_insn(class_name, method_name)
+                        method_instruction_dict = method_instruction.convert_to_dict()
+                        data_flows = eval(method_instruction_dict['data_flows'])
                         cfg = generate_cfg(method_instruction, cfg_provider, False).convert_to_dict()
-                        print(cfg)
                 else:
                     method_insn = None
 
                 return render_template('methods.html', md5=file_md5, select=select,
                                        class_name_list=class_name_list, method_name_list=method_name_list,
-                                       method_insns=method_insn, cfg_model=cfg, method_title=method_title)
+                                       method_insns=method_insn, cfg_model=cfg, method_title=method_title,
+                                       data_flows=data_flows)
     return '''
     <html>
     <head><title>Analysis</title></head>
@@ -311,7 +314,6 @@ def binary_analysis_checkers(file_md5):
                             checker_modify = time_to_str(os.path.getmtime(checker_path))
                             checker_dict = {'size': checker_size, 'create': checker_create, 'modify': checker_modify,
                                             'path': checker_path, 'name': checker}
-                            print(checker_dict)
                             checkers_path.append(checker_dict)
                 else:
                     checkers_path = []

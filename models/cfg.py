@@ -118,7 +118,6 @@ class CFGBlock:
             self.nodes[-1].describe()
 
     def convert_to_dict(self):
-        print(self.follow_label)
         cfg_block_dict = {'name': self.name, 'out': self.out,
                           'follow_blocks': self.follow_blocks, 'follow_label': self.follow_label}
         node_list = []

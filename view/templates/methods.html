@@ -14,6 +14,7 @@
     <script src="/static/js/go-debug.js"></script>
     <script>
         let cfg_model = '{{ cfg_model|tojson }}';
+        let data_flows_model = '{{ data_flows|tojson }}'
     </script>
 </head>
 <body>
@@ -172,7 +173,10 @@
                             {% endif %}
                             {% endfor %}
                     </div>
-                    <div class="methods-detail-graph" id="methods-cfgs">
+                    <div class="methods-detail-graph">
+                        <div class="methods-graph-cfg" id="methods-cfgs"></div>
+                        <div style="display: inline-block; width: 1px; height: 100%; background-color: rgba(199,199,199,0.46)"></div>
+                        <div class="methods-graph-dfg" id="methods-dfgs"></div>
                     </div>
                 </div>
             </div>

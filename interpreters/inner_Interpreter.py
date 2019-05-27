@@ -248,9 +248,10 @@ class Interpreter:
                 #     del self.context.variable_from[self.context.register_variable['gen_' + reg]]
                 del self.context.register_variable['gen_' + reg]
 
-
-    def modify_memory(self, address, value):
+    def modify_memory(self, address, value, from_reg=None):
         self.memory[hex(address)] = value
+        if from_reg is not None:
+            self.context.str_memory(from_reg, hex(address))
 
     def current_state(self):
         for i in range(len(self.gen_regs)):

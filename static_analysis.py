@@ -328,8 +328,8 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
             # print(str(e))
             return False
 
-        if class_name == 'ABKModelManager':
-            print(caller_name, meth_name)
+        # if class_name == 'ABKModelManager':
+        #     print(caller_name, meth_name)
         # 处理 Objective-C 中的方法调用相关内容
         # Handle Notification
         if caller_name == 'NSNotificationCenter' and meth_name == 'addObserver:selector:name:object:':
@@ -361,6 +361,7 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
         # 处理方法中的参数
         # 从上下文中提取数据变量，来生成数据流依赖
         method_arguments = mach_info.get_arguments_from_method(caller_name, meth_name)
+
         for i in range(0, len(method_arguments)):
             argument_type = method_arguments[i].type
             argument = None
@@ -379,6 +380,11 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
                 context_reg_name = 'gen_' + str(i)
             else:
                 context_reg_name = 'float_' + str(i)
+            if class_name == 'PasteBoardManager' and method_name == 'copyText:':
+                print('sdlkfjsldfksdjflks')
+                print(caller_name, meth_name)
+                print(context_reg_name)
+                print(context_reg_name in inter.context.register_variable)
             if context_reg_name in inter.context.register_variable:
                 var_name = inter.context.register_variable[context_reg_name]
                 from_item = inter.context.variable_from[var_name]
@@ -520,8 +526,8 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
         inter.modify_regs('0', RETURN_VALUE - (len(_g_return_types) - 1))
         inter.context.add_variable('gen_0')  # 存储返回值
         inter.context.var_from('var_' + str(inter.context.variable_count - 1), instruction)
-        if caller_name == 'PasteBoardManager' and meth_name == 'getOutText':
-            print('var_' + str(inter.context.variable_count - 1))
+        # if caller_name == 'PasteBoardManager' and meth_name == 'getOutText':
+        #     print('var_' + str(inter.context.variable_count - 1))
 
     instruction.goto(caller_name, meth_name)  # ！！！！！！！！！！！！！
     return True
@@ -581,7 +587,7 @@ def handle_super_method(mach_info, class_data, inter, instruction):
 
 
 def _analyse_basic_block(block_instruction, identify, mach_info, class_data, class_name, method_name, inter: Interpreter, add_range, method_hub=None, recursive_stack=set([])):
-    print('analyse basic block')
+    # print('analyse basic block')
     r_stack = recursive_stack.copy()
 
     basic_block = MethodBasicBlockInstructions(identify)
@@ -593,17 +599,20 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
             result = results[0]
         comment = None
         if result is not None:
+            if hex(result) in inter.memory:
+                result = inter.memory[hex(result)]
             if result == SELF_POINTER:  # 自己的方法
                 comment = class_name
             elif result <= RETURN_VALUE:  # 某个方法的返回值
-                pass
+                return_index = RETURN_VALUE - result
+                if return_index < len(_g_return_types):
+                    comment = _g_return_types[return_index]
+                else:
+                    comment = 'id'
             elif result < SELF_POINTER:  # 调用的是某个参数的方法
                 comment = 'PARAMETERS_' + str(SELF_POINTER - result - 1)
             elif result < 0:  # 调用的是父类的方法
-                if class_data is None:
-                    comment = class_name
-                else:
-                    comment = class_data.super
+                pass
             else:
                 obj_name_key = hex(result)
                 # 其他类
@@ -612,8 +621,6 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                     comment = obj_name
                 elif obj_name_key in mach_info.symbols:  # 直接可以从符号表中获得信息
                     obj_name = mach_info.symbols[obj_name_key]
-                    # obj_name_index = obj_name.find('$')
-                    # obj_name = obj_name[obj_name_index + 2:]
                     comment = obj_name
                 elif obj_name_key in mach_info.class_datas:  # 调用的是某个类
                     obj_data = mach_info.class_datas[obj_name_key]
@@ -632,12 +639,6 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
             if comment is not None:
                 cs_insn.comment = comment
 
-        # if cs_insn.address == 0x10002f998:
-        #     ctx = inter.context
-        #     print(ctx.data_flow)
-        #     print(ctx.variable_from)
-        #     print(ctx.register_variable)
-        #     print(ctx.memory_variable)
         # 生成语句
         insn_str = hex(cs_insn.address) + '\t' + cs_insn.bytes.hex() + '\t' + cs_insn.mnemonic + '\t' + cs_insn.op_str
         instruction = Instruction(insn_str)
@@ -661,9 +662,11 @@ def _analyse_basic_block(block_instruction, identify, mach_info, class_data, cla
                 # basic_block.insert_instruction(instruction)
 
             elif function_name == "_objc_storeStrong":  # 一些特殊方法
+                if instruction.address == 0x100005668:
+                    print(inter.context.register_variable)
                 reg0_value = inter.gen_regs[0].value
                 reg1_value = inter.gen_regs[1].value
-                inter.modify_memory(reg0_value, reg1_value)
+                inter.modify_memory(reg0_value, reg1_value, 'gen_1')
 
             elif function_name == "_objc_msgSend":  # 调用方法
                 # 处理普通方法调用
@@ -765,14 +768,16 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
         if len(method_arguments) > 2:
             for i in range(2, len(method_arguments)):
                 argument_type = method_arguments[i].type
+                print(argument_type)
                 length = method_arguments[i].length
                 argument = None
-                if argument_type == 'id' or argument_type == 'Class' or argument_type == 'SEL' or argument_type == 'Pointer':
+                if argument_type == 'id' or argument_type == '#id' or argument_type == 'Class' or argument_type == 'SEL' or argument_type == 'Pointer':
                     argument = ('int', length, SELF_POINTER - i + 1)
-                elif argument_type == 'Float':
+                elif argument_type == 'Float' or argument_type == '#float' or argument_type == '#double' or argument_type == 'float' or argument_type == 'double':
                     argument = ('float', length, SELF_POINTER - i + 1)
                 elif argument_type == 'Char' or argument_type == 'Integer' or argument_type == 'Bool':
                     argument = ('int', length, SELF_POINTER - i + 1)
+
                 if argument is not None:
                     arguments.append(argument)
 
@@ -969,6 +974,8 @@ def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue=None):
             for method_instruction in method_instructions:
                 _analyse_method(method_instruction, mach_info, method_hub=method_hub)
             # update_method_hub_of_md5(binary_md5, method_hub, len(methods_hubs) - 1, method_insn_update=True)
+            # print('save  slfskdlfklsjflksdjl')
+            # print(method_hub.method_insns['ABKSettingViewController'][0].data_flows)
             store_md5_with_method_hub(binary_md5, method_hub, len(methods_hubs))
             store_md5_with_cs_instructions(binary_md5, method_instructions, mach_info.is_64_bit)
             update_mach_container_of_md5(binary_md5, mach_container)
@@ -979,6 +986,8 @@ def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue=None):
         else:
             print('Load Method instructions form mongoDB')
             method_hub = load_method_hub_of_md5(binary_md5, len(methods_hubs))
+            # print('load  slfskdlfklsjflksdjl')
+            # print(method_hub.method_insns['ABKSettingViewController'][0].data_flows)
             msg_queue.put('Analyze all methods complete')
         methods_hubs.append(method_hub)
         # if len(method_hub.method_insns) == 0:

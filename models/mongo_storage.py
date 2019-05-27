@@ -240,7 +240,6 @@ def load_mach_info(id):
         for field_key, should_str in insert_fields_key:
             field_value = mach_info_col.find_one({'type': field_key, '_id': mach_info_dict[field_key]})['data']
             if should_str:
-                print(field_key)
                 mach_info.__dict__[field_key] = eval(field_value)
             else:
                 mach_info.__dict__[field_key] = field_value
@@ -391,13 +390,8 @@ def update_mach_container_of_md5(md5, mach_container: MachContainer):
     mach_container_dict = mach_container_col.find_one({'md5': md5})
     if mach_container_dict is not None:
         data_dict = mach_container_dict['data']
-        print(data_dict['mach_objects'])
         mach_objects = []
         for mach_info in mach_container.mach_objects:
-            print('update mach_objectsdjklasdjfklsjlfsdklfksjfklsdjfkls')
-            print(mach_info.dylib_frameworks_mach)
-            print(mach_info.dylib_frameworks_pair)
-            print(mach_info.dylib_frameworks_path)
             mach_objects.append(store_mach_info(mach_info, current_data_dir_path))  # 现在直接添加新的 Mach Object
         data_dict['mach_objects'] = mach_objects
         mach_container_col.update_one({'_id': mach_container_dict['_id']}, {'$set': mach_container_dict})
@@ -549,16 +543,6 @@ def store_md5_with_method_hub(md5, method_hub: MachoMethodHub, tag):
 
     method_hub_dict = {}
 
-    # mh_cs_insns_col = mongo_db['mh_cs_insns']
-    # mh_cs_insns = {}
-    # for key in method_hub.cs_insns:
-    #     cs_insn_list = []
-    #     for cs_insn in method_hub.cs_insns[key]:
-    #         cs_insn_list.append(cs_insn.convert_to_dict())
-    #     print(len(cs_insn_list))
-    #     result = mh_cs_insns_col.insert_one({'data': cs_insn_list})
-    #     mh_cs_insns[key] = result.inserted_id
-    # method_hub_dict['cs_insns'] = mh_cs_insns
     mh_cs_insns = {}
     mh_cs_insns_path = os.path.join(instruction_dir, '0' + str(int(time.time() * 1000)))
     # mh_cs_insns_file = open(mh_cs_insns_path, 'ab')
@@ -571,15 +555,6 @@ def store_md5_with_method_hub(md5, method_hub: MachoMethodHub, tag):
         mh_cs_insns_file.write(pickle.dumps(mh_cs_insns))
     method_hub_dict['cs_insns'] = mh_cs_insns_path
 
-    # mh_method_insns_col = mongo_db['mh_method_insns']
-    # mh_method_insns = {}
-    # for class_name in method_hub.method_insns:
-    #     mh_method_insns[class_name] = []
-    #     class_methods = method_hub.method_insns[class_name]
-    #     for method_insn in class_methods:
-    #         result = mh_method_insns_col.insert_one({'data': method_insn.convert_to_dict()})
-    #         mh_method_insns[class_name].append(result.inserted_id)
-    # method_hub_dict['method_insns'] = str(mh_method_insns)
     mh_method_insns = {}
     for class_name in method_hub.method_insns:
         mh_method_insns[class_name] = []
@@ -590,23 +565,16 @@ def store_md5_with_method_hub(md5, method_hub: MachoMethodHub, tag):
     with open(mh_method_insns_path, 'wb') as mh_method_insns_file:
         mh_method_insns_file.write(pickle.dumps(mh_method_insns))
     method_hub_dict['method_insns'] = mh_method_insns_path
-    print('method_insns_path', mh_method_insns_path)
 
-    print('md5and tag')
-    print(md5, tag)
     method_hub_col.insert_one({'md5': md5, 'tag': tag, 'data': method_hub_dict})
 
 
 def update_method_hub_of_md5(md5, method_hub: MachoMethodHub, tag, cs_insn_update=False, method_insn_update=False):
-    print('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     mongo_client = pymongo.MongoClient('mongodb://127.0.0.1:27017/')
     mongo_db = mongo_client['codeknife']
     method_hub_col = mongo_db['method_hub']
 
-    print('md5and tag')
-    print(md5, tag)
     method_hub_dict = method_hub_col.find_one({'md5': md5, 'tag': tag})
-    print(method_hub_dict)
     if method_hub_dict is not None:
 
         data_dict = method_hub_dict['data']
@@ -644,8 +612,6 @@ def update_method_hub_of_md5(md5, method_hub: MachoMethodHub, tag, cs_insn_updat
             with open(mh_method_insns_path, 'wb') as mh_method_insns_file:
                 mh_method_insns_file.write(pickle.dumps(mh_method_insns))
             data_dict['method_insns'] = mh_method_insns_path
-            print('sdkjfklsdjfklsdjsdfsdfsdlfjskljflsdjkl')
-            print('method_insns_path', mh_method_insns_path)
 
             # mh_method_insns = {}
             # for class_name in method_hub.method_insns:
@@ -670,8 +636,6 @@ def update_method_hub_of_md5(md5, method_hub: MachoMethodHub, tag, cs_insn_updat
         #             result = mh_method_insns_col.insert_one({'data': method_insn.convert_to_dict()})
         #             mh_method_insns[class_name].append(result.inserted_id)
         #     data_dict['method_insns'] = str(mh_method_insns)
-        print(method_hub_dict['data'])
-        print('Will update')
         method_hub_col.update_one({'_id': method_hub_dict['_id']}, {'$set': method_hub_dict})
 
 
