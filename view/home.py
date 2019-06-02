@@ -2,7 +2,7 @@ import webbrowser
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import os
 import zipfile
-from basic_analysis import basic_analysis
+from basic_analysis import basic_analysis, extract_app_path_from_ipa
 from static_analysis import view_static_analysis
 import threading
 from queue import Queue
@@ -21,8 +21,11 @@ app.config['UPLOAD_FOLDER'] = 'upload'
 app.jinja_env.add_extension('jinja2.ext.do')
 
 _g_process_msg_queues = {}
+_g_process_obj_queues = {}
 _g_md5_messages = {}
 _g_md5_object = {}
+
+_g_execute_msg_queues = {}
 
 _g_load_commands_name = {
     1: 'LC_SEGMENT', 2: 'LC_SYMTAB', 3: 'LC_SYMSEG', 4: 'LC_THREAD',
@@ -48,7 +51,11 @@ _g_load_commands_name = {
 
 
 def filter_file_type(file_name: str):
-    if '.' in file_name and file_name.split('.')[1].lower() in ALLOWED_EXTENSIONS:
+    file_components = file_name.split('.')
+    file_extension = file_components[-1].lower()
+    if file_extension == 'zip' and len(file_components) >= 2:
+        file_extension = file_components[-2]
+    if file_extension in ALLOWED_EXTENSIONS:
         return True
     return False
 
@@ -63,6 +70,9 @@ def analysis(file_md5):
     file_path = load_path_of_md5(file_md5)
     basic_info = load_basic_info_of_md5(file_md5)
     if basic_info is not None:
+        _, file_type = os.path.splitext(file_path)
+        if file_type == '.ipa':
+            extract_app_path_from_ipa(file_path)
         return render_template('analysis.html', basic_info=basic_info, md5=file_md5)
     else:
         if file_path is not None:
@@ -80,11 +90,13 @@ def analysis(file_md5):
 @app.route('/analysis/binary/pre_process')
 def binary_process_log():
     global _g_process_msg_queues
+    global _g_process_obj_queues
     global _g_md5_object
 
     file_md5 = request.args.get('md5')
     if file_md5 in _g_process_msg_queues:  # 正在分析
         msg_queue = _g_process_msg_queues[file_md5]
+        obj_queue = _g_process_obj_queues[file_md5]
         try:
             msg = msg_queue.get(block=False)
         except:
@@ -94,8 +106,11 @@ def binary_process_log():
             del _g_process_msg_queues[file_md5]
             basic_info = load_basic_info_of_md5(file_md5)
             binary_md5 = basic_info.execute_hash
-            mach_container = load_mach_container_of_md5(binary_md5)
-            method_hub = load_method_hub_of_md5(binary_md5, 0)
+
+            # mach_container = load_mach_container_of_md5(binary_md5)
+            mach_container = obj_queue.get()
+            method_hub = obj_queue.get()
+            # method_hub = load_method_hub_of_md5(binary_md5, 0)
             _g_md5_object[file_md5] = (mach_container, method_hub)
 
         response_dict = {
@@ -131,6 +146,8 @@ def binary_analysis(file_md5):
     # return render_template('binary.html', complete=2, md5=file_md5, mach_info='ddd', method_hub='ddd')
     global _g_md5_object
     global _g_load_commands_name
+    global _g_process_msg_queues
+    global _g_process_obj_queues
 
     basic_info = load_basic_info_of_md5(file_md5)
     if basic_info is not None:
@@ -142,11 +159,13 @@ def binary_analysis(file_md5):
                                        method_hub=method_hub, load_commands_name=_g_load_commands_name)
             else:
                 _g_process_msg_queues[file_md5] = Queue(100)
+                _g_process_obj_queues[file_md5] = Queue(100)
 
                 app_name = basic_info.display_name
                 app_path = os.path.join(basic_info.app_path, basic_info.execute_path)
                 t = threading.Thread(target=view_static_analysis,
-                                     args=(app_path, app_name, 0, _g_process_msg_queues[file_md5]))
+                                     args=(app_path, app_name, 0,
+                                           _g_process_msg_queues[file_md5], _g_process_obj_queues[file_md5]))
                 t.start()
                 return render_template('binary.html', complete=0, md5=file_md5)
         else:  # 说明正在分析
@@ -328,6 +347,10 @@ def binary_analysis_checkers(file_md5):
 
 @app.route('/analysis/binary/<file_md5>/checkers/edit')
 def binary_analysis_checkers_edit(file_md5):
+    global _g_execute_msg_queues
+    if file_md5 in _g_execute_msg_queues:
+        _g_execute_msg_queues[file_md5] = None
+
     checker_name = request.args.get('ch')
     if checker_name is None:
         return render_template('checkers_edit.html', md5=file_md5)
@@ -343,19 +366,40 @@ def binary_analysis_checkers_edit(file_md5):
 @app.route('/analysis/binary/<file_md5>/execute', methods=['POST'])
 def binary_analysis_execute_checker(file_md5):
     global _g_md5_object
-    global _g_md5_messages
+    global _g_execute_msg_queues
 
     basic_info = load_basic_info_of_md5(file_md5)
     if basic_info is not None:
         if file_md5 not in _g_process_msg_queues:
             if file_md5 in _g_md5_object:
+
+                _g_execute_msg_queues[file_md5] = Queue(1000)
                 mach_info, method_hub = _g_md5_object[file_md5]
                 code_bytes: bytes = request.stream.read()
                 code = code_bytes.decode('utf-8')
-                execute_results = execute_checker(code, mach_info, method_hub)
-                return jsonify(execute_results)
-    # Execute this code
-    return jsonify(['Error'])
+
+                t = threading.Thread(target=execute_checker,
+                                     args=(code, mach_info, method_hub, _g_execute_msg_queues[file_md5]))
+                t.start()
+                return 'OK'
+    return 'Error'
+
+
+@app.route('/analysis/binary/<file_md5>/execute/status')
+def binary_analysis_execute_checker_status(file_md5):
+    global _g_execute_msg_queues
+
+    if file_md5 in _g_execute_msg_queues:
+        msg_queue = _g_execute_msg_queues[file_md5]
+        try:
+            msg = msg_queue.get(block=False)
+        except:
+            msg = None
+
+        if msg is not None:
+            return jsonify(msg)
+        else:
+            return jsonify({'msg': '', 'type': 1})
 
 
 @app.route('/analysis/binary/save', methods=['POST'])

@@ -73,32 +73,60 @@ function execute_code() {
         url: '/analysis/binary/' + file_md5 + '/execute',
         data: codeArea.innerHTML,
         success: function (data) {
-            var result_msg = '\n';
-            for (var result_index in data) {
-                var result_dict = data[result_index];
-                if (result_dict['type'] == 0) {
-                    var msg = result_dict['msg'];
-                    if (msg instanceof Array) {
-                        result_msg += '<p class="checker-result-success"><span>[+] </span>' + '[' + '</p>';
-                        for (var msg_index in msg) {
-                            result_msg += '<p class="checker-result-success"><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>' + convert_to_str(msg[msg_index]) + ' ,</p>';
+            if (data === 'OK') {
+                $('.checker-result')[0].innerHTML = '';
+                var msg_request = setInterval(function () {
+                    $.ajaxSettings.async = false;
+                    $.getJSON("/analysis/binary/" + file_md5 + "/execute/status", function (result) {
+                        console.log(result);
+                        if (result['type'] == 0) {
+                            var msg = result['msg'];
+                            var old_data = $('.checker-result')[0].innerHTML;
+                            var new_data = old_data + '<p class="checker-result-success"><span>[+] </span>' + msg + '</p>';
+                            $('.checker-result')[0].innerHTML = new_data;
+                        } else if (result['type'] == -1) {
+                            var msg = result['msg'];
+                            var old_data = $('.checker-result')[0].innerHTML;
+                            var new_data = old_data + '<p class="checker-result-error"><span>[-] </span>' + msg + '</p>';
+                            $('.checker-result')[0].innerHTML = new_data;
+                        } else {
+                            var msg = result['msg'];
+                            if (msg === 'end') {
+                                clearInterval(msg_request);
+                            }
                         }
-                        result_msg += '<p class="checker-result-success"><span>&nbsp;&nbsp;&nbsp;&nbsp;</span>' + ']' + '</p>';
-                    } else if (msg instanceof Object) {
-                        result_msg += '<p class="checker-result-success"><span>[+] </span>' + '{' + '</p>';
-                        for (var msg_index in msg) {
-                            result_msg += '<p class="checker-result-success"><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>' + msg_index + ' :' + convert_to_str(msg[msg_index]) + ' ,</p>';
-                        }
-                        result_msg += '<p class="checker-result-success"><span>&nbsp;&nbsp;&nbsp;&nbsp;</span>' + '}' + '</p>';
-                    } else {
-                        result_msg += '<p class="checker-result-success"><span>[+] </span>' + result_dict['msg'] + '</p>';
-                    }
-                } else if (result_dict['type'] == -1) {
-                    result_msg += '<p class="checker-result-error"><span>[-] </span>' + result_dict['msg'] + '</p>';
-                }
-                result_msg += '\n';
+                    });
+                }, 10);
+            } else {
+                var result_msg = '<p class="checker-result-error"><span>[-] </span>Something error!</p>';
+                $('.checker-result')[0].innerHTML = result_msg;
             }
-            $('.checker-result')[0].innerHTML = result_msg;
+            // var result_msg = '\n';
+            // for (var result_index in data) {
+            //     var result_dict = data[result_index];
+            //     if (result_dict['type'] == 0) {
+            //         var msg = result_dict['msg'];
+            //         if (msg instanceof Array) {
+            //             result_msg += '<p class="checker-result-success"><span>[+] </span>' + '[' + '</p>';
+            //             for (var msg_index in msg) {
+            //                 result_msg += '<p class="checker-result-success"><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>' + convert_to_str(msg[msg_index]) + ' ,</p>';
+            //             }
+            //             result_msg += '<p class="checker-result-success"><span>&nbsp;&nbsp;&nbsp;&nbsp;</span>' + ']' + '</p>';
+            //         } else if (msg instanceof Object) {
+            //             result_msg += '<p class="checker-result-success"><span>[+] </span>' + '{' + '</p>';
+            //             for (var msg_index in msg) {
+            //                 result_msg += '<p class="checker-result-success"><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>' + msg_index + ' :' + convert_to_str(msg[msg_index]) + ' ,</p>';
+            //             }
+            //             result_msg += '<p class="checker-result-success"><span>&nbsp;&nbsp;&nbsp;&nbsp;</span>' + '}' + '</p>';
+            //         } else {
+            //             result_msg += '<p class="checker-result-success"><span>[+] </span>' + result_dict['msg'] + '</p>';
+            //         }
+            //     } else if (result_dict['type'] == -1) {
+            //         result_msg += '<p class="checker-result-error"><span>[-] </span>' + result_dict['msg'] + '</p>';
+            //     }
+            //     result_msg += '\n';
+            // }
+            // $('.checker-result')[0].innerHTML = result_msg;
         }
     });
 }

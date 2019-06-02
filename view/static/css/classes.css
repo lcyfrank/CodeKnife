@@ -72,6 +72,16 @@
     color: #00a4e0;
 }
 
+.class-code-name {
+    color: black;
+    text-decoration: none;
+}
+
+.class-code-name:hover {
+    color: black;
+    text-decoration: none;
+}
+
 .search-input {
     display: block;
     width: calc(100% - 20px);

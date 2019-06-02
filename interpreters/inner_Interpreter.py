@@ -507,7 +507,10 @@ class Interpreter:
                 context_src_register = 'float_' + str(self.float_regs.index(source_register))
 
             if type(dest_register) == Register:
-                context_dst_register = 'gen_' + str(self.gen_regs.index(dest_register))
+                if dest_register in self.gen_regs:
+                    context_dst_register = 'gen_' + str(self.gen_regs.index(dest_register))
+                else:
+                    context_dst_register = 'gen_' + dest_register_name
             else:
                 context_dst_register = 'float_' + str(self.float_regs.index(dest_register))
             self.context.mov_regs(context_src_register, context_dst_register)
@@ -518,6 +521,7 @@ class Interpreter:
     def handle_load_register(self, insn, length=8):
         tracking = []
         memory_operand = insn.operands[-1].mem
+        # Waring ????
         if insn.operands[-1].type == ARM64_OP_IMM:
             memory_str = insn.op_str
             memory_str_index = memory_str.find('#') + 1
@@ -571,7 +575,22 @@ class Interpreter:
         return self.handle_load_register(insn)
 
     def handle_store_register(self, insn, length=8):
-        memory_operand = insn.operands[-1].mem
+        # print(hex(insn.address))
+        # print(insn.mnemonic)
+        # print(insn.operands)
+        # print(insn.operands[-1].type)
+        # print(insn.op_str)
+
+        new_address = 0
+        if insn.operands[-1].type != ARM64_OP_MEM:
+            memory_operand = insn.operands[-2].mem
+            if insn.operands[-1].type == ARM64_OP_IMM:
+                new_address = insn.operands[-1].imm
+            elif insn.operands[-1].type == ARM64_OP_REG:
+                new_address_register = self.get_register(insn.operands[-1].reg)
+                new_address = new_address_register.value
+        else:
+            memory_operand = insn.operands[-1].mem
         memory_reg_name = memory_operand.base
         if memory_reg_name is None:
             memory_str = insn.op_str
@@ -582,6 +601,9 @@ class Interpreter:
             memory_reg = self.get_register(memory_reg_name)
             memory_disp = memory_operand.disp
             memory = memory_reg.value + memory_disp
+            if insn.operands[-1].type != ARM64_OP_MEM:
+                memory_reg.value = memory_reg.value + new_address
+
         for j in range(0, len(insn.operands) - 1):
             operand = insn.operands[j]
             if operand.type == ARM64_OP_REG:

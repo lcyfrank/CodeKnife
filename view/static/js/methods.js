@@ -488,6 +488,7 @@ function draw_dfg_graph() {
         if (df_count <= 0) continue;
 
         var each_width = graph_total_width / df_count;
+        var current_width = 0;
         for (var df_index in level[level_number]) {  // 每一列
             var df_name = level[level_number][df_index];
             var data_flow = data_flows_model[df_name];
@@ -499,9 +500,10 @@ function draw_dfg_graph() {
                 }
                 dfg_nodeDataArray.push({
                     key: 'df' + df_name,
-                    loc: '' + (300 + each_width / 2 + each_width * df_index) + ' ' + (70 * level_number),
+                    loc: '' + (current_width) + ' ' + (70 * level_number),
                     items: [{text: df_text, color: 'rgba(100, 100, 100, 100)'}],
                 });
+                current_width += (df_text.length) * 10;
             } else {
                 var df_text = df_name;
                 if (typeof data_flow.source !== "string") {
@@ -509,10 +511,10 @@ function draw_dfg_graph() {
                 }
                 dfg_nodeDataArray.push({
                     key: 'df' + df_name,
-                    loc: '' + (300 + each_width / 2 + each_width * df_index) + ' ' + (70 * level_number),
+                    loc: '' + (current_width) + ' ' + (70 * level_number),
                     items: [{text: df_text, color: 'rgba(100, 100, 100, 100)'}],
                 });
-
+                current_width += (df_text.length) * 10;
                 for (var flow_to_index in data_flow.flow_to) {
                     var flow_to_position = data_flow.flow_to[flow_to_index];
                     var flow_to = flow_to_position[0];

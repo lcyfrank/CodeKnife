@@ -30,12 +30,11 @@ $(function () {
             if (response != "Error") {
                 let file_md5 = response.substr(2, response.length - 2);
                 window.location.href = "/analysis/basic/" + file_md5;
-                console.log("Upload successfully!");
             } else {
-                console.log("Upload failed!");
+                $("#upload-button").attr("disabled", false).text("上传");
             }
         }).fail(function (response) {
-            console.log("Upload failed!");
+            $("#upload-button").attr("disabled", false).text("上传");
         });
     });
 

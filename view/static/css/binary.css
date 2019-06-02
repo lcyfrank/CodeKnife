@@ -25,3 +25,24 @@
 .load-commands-card-header button:visited {
     text-decoration: none;
 }
+
+.symbols {
+    height: 30px;
+    margin: 0;
+}
+
+.symbol-address {
+    display: inline-block;
+    width: 150px;
+    font-size: 13px;
+    color: #197eb2;
+}
+
+.symbol-value {
+    display: inline-block;
+    width: calc(100% - 180px);
+    overflow: hidden;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1bb28a;
+}

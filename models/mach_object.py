@@ -816,6 +816,15 @@ class MachObject:
                             position += 1
                     else:
                         while position < len(signature):
+                            if signature[position] in bracket_pair:
+                                bracket_stack.append(signature[position])
+                                position += 1
+                                while position < len(signature) and len(bracket_stack) > 0:
+                                    if signature[position] == bracket_pair[bracket_stack[-1]]:
+                                        bracket_stack.pop(-1)
+                                    elif signature[position] in bracket_pair:
+                                        bracket_stack.append(signature[position])
+                                    position += 1
                             if not signature[position].isdigit():
                                 position += 1
                             else:
@@ -850,6 +859,7 @@ class MachObject:
         arguments = []
         if len(type_list) == 0:
             return '#id', []
+
         for i in range(len(type_list) - 1):
             arg_type = type_list[i]
             length = position_list[i + 1] - position_list[i]
@@ -890,9 +900,7 @@ class MachObject:
             objc_data = ObjcData.parse_from_bytes(od_bytes)
         return objc_class, objc_data
 
-
     def get_type_of_type_encoding(self, type_str: str):
-
         type_encoding = {
             'c': 'char', 'i': 'int', 's': 'short',
             'l': 'long', 'q': 'long long', 'C': 'unsigned char',
@@ -900,9 +908,18 @@ class MachObject:
             'Q': 'unsigned long long', 'f': 'float', 'd': 'double',
             'B': 'bool', 'v': 'void', '*': 'char *'
         }
+        if len(type_str) == 0:
+            return None
         if type_str[0] == 'r':
             return 'const ' + self.get_type_of_type_encoding(type_str[1:])
-        if "@" in type_str:
+        # if "@" in type_str:
+        if type_str[0] == '[':
+            return type_str
+        elif type_str[0] == '{' or type_str[0] == '(':
+            last_index = type_str.find('=')
+            objc_ivar_type = type_str[1:last_index]
+            return objc_ivar_type
+        elif '@' in type_str:
             if len(type_str) < 2:
                 return 'id'
             objc_ivar_type_begin = type_str.find("@\"") + 2
@@ -916,15 +933,14 @@ class MachObject:
             return 'SEL'
         elif '^' in type_str:
             objc_ivar_type = self.get_type_of_type_encoding(type_str[1:])
+            if objc_ivar_type is None:
+                return 'void *'
             return objc_ivar_type + ' *'
-        elif type_str[0] == '[':
-            return type_str
-        elif type_str[0] == '{' or type_str[0] == '(':
-            last_index = type_str.find('=')
-            objc_ivar_type = type_str[1:last_index]
-            return objc_ivar_type
         elif type_str in type_encoding:
             return type_encoding[type_str]
+        elif len(type_str) > 1:
+            return self.get_type_of_type_encoding(type_str[1:])
+
 
     def parse_class_methods_and_data(self):
         # TO-DO: 添加 class_data 中的 properties
@@ -1076,7 +1092,9 @@ class MachObject:
                     if '@' in objc_ivar_type:
                         objc_ivar_type = self.get_type_of_type_encoding(objc_ivar_type)
                     else:
-                        objc_ivar_type = '#' + self.get_type_of_type_encoding(objc_ivar_type)
+                        objc_ivar_type = self.get_type_of_type_encoding(objc_ivar_type)
+                        if objc_ivar_type is None:
+                            objc_ivar_type = '#Unknown'
 
                     ivar = IvarData(objc_ivar_name, objc_ivar_type)
                     class_data.insert_ivar(ivar)
@@ -1130,7 +1148,9 @@ class MachObject:
                     property_type_segments = property_type.split(',')
 
                     property_type = self.get_type_of_type_encoding(property_type_segments[0])
-                    if '@' not in property_type_segments[0]:
+                    if property_type is None:
+                        property_type = '#Unknown'
+                    elif '@' not in property_type_segments[0]:
                         property_type = '#' + property_type
                     attributes = []
                     for i in range(1, len(property_type_segments)):
