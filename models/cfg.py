@@ -165,6 +165,7 @@ class CFGNode:
         node_dict['oc_blocks'] = oc_block_list
         return node_dict
 
+
 class CFGDataFlow:
 
     def __init__(self, identify=''):
