@@ -353,7 +353,10 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
                 # System notification
                 notification = mach_info.symbols[notification_name_key]
             elif notification_name_key in mach_info.cfstrings:
-                notification = mach_info.symbols[hex(mach_info.cfstrings[notification_name_key])]
+                if hex(mach_info.cfstrings[notification_name_key]) in mach_info.symbols:
+                    notification = mach_info.symbols[hex(mach_info.cfstrings[notification_name_key])]
+                else:
+                    notification = 'Unknown'
             else:
                 notification = 'Unknown'
             mach_info.add_notification_observer(notification, observer, selector)
@@ -365,7 +368,10 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
                 # System notification
                 notification = mach_info.symbols[notification_name_key]
             elif notification_name_key in mach_info.cfstrings:
-                notification = mach_info.symbols[hex(mach_info.cfstrings[notification_name_key])]
+                if hex(mach_info.cfstrings[notification_name_key]) in mach_info.symbols:
+                    notification = mach_info.symbols[hex(mach_info.cfstrings[notification_name_key])]
+                else:
+                    notification = 'Unknown'
             else:
                 notification = 'Unknown'
             mach_info.post_notification(notification, class_name, method_name)
@@ -434,6 +440,10 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
                                     _analyse_method(block_instruction, mach_info, method_hub, recursive_stack=r_stack)
 
             else:  # Stack block
+                if hex(block_value) not in inter.memory:
+                    continue
+                # if hex(inter.memory[hex(block_value)]) not in mach_info.symbols:
+                #     continue
                 dylib_name = mach_info.symbols[hex(inter.memory[hex(block_value)])]
                 if dylib_name == '__NSConcreteStackBlock':
                     type = BlockMethodTypeStack
@@ -549,8 +559,11 @@ def handle_method_call(mach_info, class_data, class_name, method_name, inter, me
 
 def handle_super_method(mach_info, class_data, inter, instruction):
     reg1_value = inter.gen_regs[1].value
-    meth_name = mach_info.symbols[hex(reg1_value)]  # 解析出方法名
-
+    if hex(reg1_value) not in mach_info.symbols:
+        meth_name = 'unknown_method'
+    else:
+        meth_name = mach_info.symbols[hex(reg1_value)]  # 解析出方法名
+        
     # 处理父类调用的返回值
     # ！！！！！！！！！！！！！
     if class_data is None:  # None 的时候通常是分类
@@ -899,7 +912,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
 
     return_types = list(set(return_types))
     return_types_str = []
-
+    return_type = 'id'
     for rt in return_types:
         return_type = get_obj_name(mach_info, rt, class_name, class_data)
         return_types_str.append(return_type)
@@ -918,6 +931,7 @@ def _analyse_method(method, mach_info, method_hub=None, recursive=True, recursiv
     return method_instructions
 
 
+# 进行静态分析
 def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue = None, obj_queue: Queue = None):
     global _g_current_context
     binary_md5 = md5_for_file(binary_file)
@@ -944,10 +958,15 @@ def view_static_analysis(binary_file, app_name, arch=0, msg_queue: Queue = None,
     # Parse the mach-o information
     msg_queue.put('Open binary successfully')
     msg_queue.put('Start analyzing the information of Mach-O file')
+    print('in static anaysfklsadjfklsadjfkljadskfjasdjflksjflkjslfj')
     mach_container = load_mach_container_of_md5(binary_md5)
+    print('in static anaysfklsadjfklsadjfkljadskfjasdjflksjflkjslfj')
+    print(mach_container)
+
     if mach_container is None:
         mach_container = MachContainer(mach_o_file.read(), file_provider=macho_file_provider, mode=mode)
-        # store_md5_with_mach_container(binary_md5, mach_container)
+        if len(mach_container.mach_objects) == 0:
+            mach_container = MachContainer(mach_o_file.read(), file_provider=macho_file_provider, mode=Analyse_32_Bit)
     else:
         for mach_info in mach_container.mach_objects:
             mach_info.file_provider = macho_file_provider

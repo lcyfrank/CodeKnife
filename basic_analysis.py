@@ -11,7 +11,12 @@ from models.basic_info import ApplicationBasicInfo, permission_pairs
 def extract_app_path_from_ipa(ipa_path):
     _, file_type = os.path.splitext(ipa_path)
     if file_type == '.ipa':
-        target_ipa_file = zipfile.ZipFile(ipa_path)
+        try:
+            target_ipa_file = zipfile.ZipFile(ipa_path)
+        except Exception as _:
+            target_ipa_file = None
+        if target_ipa_file is None:
+            return None
         if os.path.isdir('.tmp'):
             shutil.rmtree('.tmp')
         os.mkdir('.tmp')
@@ -36,6 +41,7 @@ def basic_analysis(path):
     app_info_plist = os.path.join(target_app_path, 'Info.plist')
     basic_info = ApplicationBasicInfo(target_app_path)
 
+    # 提取 plist 文件内容
     with open(app_info_plist, 'rb') as app_info_plist:
         plist_content = plistlib.load(app_info_plist)
 
@@ -62,7 +68,8 @@ def basic_analysis(path):
                 icon_file += '@2x'
                 icon_file_path = os.path.join(target_app_path, icon_file) + '.png'
             icon_file += '.png'
-            shutil.copy(icon_file_path, 'static/imgs/icons/' + basic_info.execute_hash + '.png')
+            if os.path.exists(icon_file_path):
+                shutil.copy(icon_file_path, 'static/imgs/icons/' + basic_info.execute_hash + '.png')
             basic_info.icon_path = basic_info.execute_hash + '.png'
         basic_info.app_version = plist_content['CFBundleShortVersionString']
 

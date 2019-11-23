@@ -1,4 +1,6 @@
 import webbrowser
+import sys
+sys.path.append("..")
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session
 import os
 import zipfile
@@ -474,6 +476,9 @@ def upload_file():
         file = request.files['file']
         file_name = file.filename
         if filter_file_type(file_name):
+
+            if not os.path.exists(app.config['UPLOAD_FOLDER']):
+                os.mkdir(app.config['UPLOAD_FOLDER'])
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], file_name)
             if os.path.exists(file_path):
                 os.remove(file_path)
@@ -489,5 +494,4 @@ def upload_file():
 
 
 if __name__ == '__main__':
-    # webbrowser.open('http://127.0.0.1:5000/')
     app.run()

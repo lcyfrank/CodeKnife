@@ -32,6 +32,7 @@ class MachContainer:
                 header = self.aple_header()
                 self.nfat_arch = header.nfat_arch
                 if mode == Analyse_32_Bit:  # just for 32-bit
+                    print('for 32')
                     for i in range(0, self.nfat_arch):
                         arch = self.aple_arch(i)
                         if arch.cputype == 0xc:  # ARM 32-bit
@@ -40,14 +41,17 @@ class MachContainer:
                             self.mach_objects.append(mach_object)
                             break
                 elif mode == Analyse_64_Bit:  # just for 64-bit
+                    print('for 64')
+
                     for i in range(0, self.nfat_arch):
                         arch = self.aple_arch(i)
-                        if arch.cputype == 0x100000c:  # ARM 32-bit
+                        if arch.cputype == 0x100000c:  # ARM 64-bit
                             mach_bytes = self.bytes[arch.offset:arch.offset + arch.size]
                             mach_object = MachObject(mach_bytes, _offset=arch.offset, file_provider=self.file_provider)
                             self.mach_objects.append(mach_object)
                             break
                 else:  # analyse both
+                    print('both')
                     for i in range(0, self.nfat_arch):  # 两个都要
                         arch = self.aple_arch(i)
                         mach_bytes = self.bytes[arch.offset:arch.offset + arch.size]
@@ -445,6 +449,8 @@ class MachObject:
                 # print(self.methods[hex(block_data.invoke)])
 
     def parse_cfstring(self):
+        if "cfstring" not in self._sections:
+            return
         cfstring, _ = self._sections["cfstring"]
         base_address = cfstring.addr
         if self.type == MachObjectTypeExecutable:
@@ -542,10 +548,15 @@ class MachObject:
             elif opcode == BIND_OPCODE_DO_BIND:
                 # print("%d\t%d\t%s\t%d\t%d\t%s" % (lib_ordinal, symbol_flags, symbol_name, symbol_type, symbol_segment, hex(base_address)))
                 # print(hex(base_address))
-                self.dylib_frameworks_pair[self.symbols[symbol_key]] = self.dylib_frameworks_path[lib_ordinal - 1]
+                if lib_ordinal - 1 >= len(self.dylib_frameworks_path):
+                    self.dylib_frameworks_pair[self.symbols[symbol_key]] = 'unknown'
+                    self.dylibs[hex(base_address)] = int(symbol_key, 16)
+                    base_address += (8 if self.is_64_bit else 4)
+                else:
+                    self.dylib_frameworks_pair[self.symbols[symbol_key]] = self.dylib_frameworks_path[lib_ordinal - 1]
 
-                self.dylibs[hex(base_address)] = int(symbol_key, 16)
-                base_address += (8 if self.is_64_bit else 4)
+                    self.dylibs[hex(base_address)] = int(symbol_key, 16)
+                    base_address += (8 if self.is_64_bit else 4)
             elif opcode == BIND_OPCODE_DO_BIND_ADD_ADDR_ULEB:
                 pointer += 1
                 val, length = uleb128(self.bytes, pointer)
@@ -606,6 +617,9 @@ class MachObject:
             else:
                 objc_category = ObjcCategory.parse_from_bytes(oc_bytes)
 
+            if hex(objc_category.name) not in self.symbols:
+                count += 1
+                continue
             category_name = self.symbols[hex(objc_category.name)]
             cat_data = CatData(category_name)
             if objc_category._class == 0:
@@ -970,6 +984,9 @@ class MachObject:
             meta_class_bytes = objc_class.metaclass.to_bytes(8 if self.is_64_bit else 4, 'little')
             meta_objc_class, meta_objc_data = self.get_class_data(meta_class_bytes)
 
+            if hex(objc_data.name) not in self.symbols:
+                count += 1
+                continue
             class_name = self.symbols[hex(objc_data.name)]
             class_data = ClassData(class_name)
 
@@ -1000,7 +1017,9 @@ class MachObject:
                     else:
                         objc_method = ObjcMethod.parse_from_bytes(om_bytes)
                     objc_method_implementation = objc_method.implementation
-
+                    # 这些符号找不到的直接不解析了
+                    if hex(objc_method.name) not in self.symbols:
+                        continue
                     objc_method_name = self.symbols[hex(objc_method.name)]
 
                     objc_method_signature = self.symbols[hex(objc_method.signature)]
@@ -1087,6 +1106,9 @@ class MachObject:
                         objc_ivar = ObjcIvar64.parse_from_bytes(oi_bytes)
                     else:
                         objc_ivar = ObjcIvar.parse_from_bytes(oi_bytes)
+                    # 这些符号找不到的直接不解析了
+                    if hex(objc_ivar.name) not in self.symbols or hex(objc_ivar.type) not in self.symbols:
+                        continue
                     objc_ivar_name = self.symbols[hex(objc_ivar.name)]
                     objc_ivar_type = self.symbols[hex(objc_ivar.type)]
                     if '@' in objc_ivar_type:
@@ -1142,6 +1164,9 @@ class MachObject:
                     else:
                         op = ObjcProperty.parse_from_bytes(op_bytes)
 
+                    # 这些符号找不到的直接不解析了
+                    if hex(op.name) not in self.symbols:
+                        continue
                     property_name = self.symbols[hex(op.name)]
                     property_type = self.symbols[hex(op.attributes)]
                     property_type = property_type[1:]
