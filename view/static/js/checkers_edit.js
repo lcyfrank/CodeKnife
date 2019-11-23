@@ -96,7 +96,7 @@ function execute_code() {
                             }
                         }
                     });
-                }, 10);
+                }, 1);
             } else {
                 var result_msg = '<p class="checker-result-error"><span>[-] </span>Something error!</p>';
                 $('.checker-result')[0].innerHTML = result_msg;
