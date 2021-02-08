@@ -5,7 +5,6 @@ Target
 __pycache__
 .vscode
 .idea
-Demos
 cfgs
 view/data/
 view/upload/
