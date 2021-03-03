@@ -69,6 +69,12 @@ for _class in background_behaviours:
 
 ### 示例展示
 
+#### 首页
+
+在首页选择上传，对应用程序 `.ipa` 或者 `.app` 格式文件进行上传来分析。
+
+<img src="./Demos/img/home.png" width="900px">
+
 #### 基本信息
 
 可以看到当前应用程序申请的权限，当前应用程序的编译信息，可执行文件的 **MD5** 编码，以及当前应用程序附带的 Developed Files 等信息。
