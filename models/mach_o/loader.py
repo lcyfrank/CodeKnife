@@ -128,6 +128,8 @@ class LoadCommand(MachBase):
     LC_LOAD_WEAK_DYLIB = (0x18 | LC_REQ_DYLD)
     LC_RPATH = (0x1c | LC_REQ_DYLD)
 
+    LC_CODE_SIGNATURE = 0x1d
+
     def __init__(self):
         self.cmd = 0
         self.cmdsize = 0
@@ -160,6 +162,8 @@ class LoadCommand(MachBase):
             return LoadDylibCommand.parse_from_dict(lc_dict)
         elif cmd == cls.LC_RPATH:
             return RpathCommand.parse_from_dict(lc_dict)
+        elif cmd == cls.LC_CODE_SIGNATURE:
+            return LinkeditDataCommand.parse_from_dict(lc_dict)
         else:
             cmd_object = LoadCommand()
             cmd_object.cmd = lc_dict['cmd']
@@ -197,6 +201,36 @@ class RpathCommand(LoadCommand):
 
     def get_size(self):
         return RpathCommand.RC_TOTAL_SIZE
+
+
+class LinkeditDataCommand(LoadCommand):
+
+    LDC_TOTAL_SIZE = 16
+    LDC_DATAOFF_RANGE = (8, 4)
+    LDC_DATASIZE_RANGE = (12, 4)
+
+    def __init__(self):
+        super(LinkeditDataCommand, self).__init__()
+        self.dataoff = 0
+        self.datasize = 0
+
+    @classmethod
+    def parse_from_bytes(cls, _bytes):
+        ldc = cls()
+        ldc.cmd = parse_int(_bytes[0:4])
+        ldc.cmdsize = parse_int(_bytes[4:8])
+        ldc.dataoff = parse_int(_bytes[8:12])
+        ldc.datasize = parse_int(_bytes[12:16])
+        return ldc
+
+    @classmethod
+    def parse_from_dict(cls, lc_dict):
+        ldc = cls()
+        ldc.__dict__ = lc_dict.copy()
+        return ldc
+
+    def get_size(self):
+        return LinkeditDataCommand.LDC_TOTAL_SIZE
 
 
 class DyldInfoCommand(LoadCommand):

@@ -514,6 +514,43 @@
                                         </div>
                                     </div>
                                 </div>
+                                {% elif command.cmd == 29 %}
+                                <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
+                                    <button class="btn btn-link" type="button" data-toggle="collapse"
+                                            data-target="#collapse-{{key}}{{loop.index}}"
+                                            aria-controls="collapse-{{key}}{{loop.index}}">
+                                        LC_CODE_SIGNATURE
+                                    </button>
+                                </div>
+                                <div id="collapse-{{key}}{{loop.index}}" class="collapse"
+                                     aria-labelledby="heading-{{key}}{{loop.index}}">
+                                    <div class="card-body load-commands-card-body">
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Load Command Type: </span>
+                                                <span class="item-value-inline">LC_CODE_SIGNATURE</span>
+                                                <span class="item-value-comment">The type of this load command</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Load Command Size: </span>
+                                                <span class="item-value-inline">{{ command.cmdsize }}</span>
+                                                <span class="item-value-comment">Total size of this load command</span>
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <span style="display: inline-block; min-width: 50%;">
+                                                <span class="item-value-strong">Data offset: </span>
+                                                <span class="item-value-inline">{{ command.dataoff }}</span>
+                                                <span class="item-value-comment">The offset of this data</span>
+                                            </span>
+                                            <span>
+                                                <span class="item-value-strong">Data Size: </span>
+                                                <span class="item-value-inline">{{ command.datasize }}</span>
+                                                <span class="item-value-comment">The size of this data</span>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
                                 {% else %}
                                 {% if command.cmd in load_commands_name %}
                                 <div class="card-header load-commands-card-header" id="heading-{{key}}{{loop.index}}">
